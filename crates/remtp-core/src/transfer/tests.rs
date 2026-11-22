@@ -991,6 +991,46 @@ async fn download_rechecks_subfolders_before_publish() {
     device.close().await;
 }
 
+/// The swap above happens at a moment that depends on thread timing; this puts the symlink in place first.
+#[cfg(unix)]
+#[test]
+fn temp_files_are_never_created_through_a_symlinked_folder() {
+    let destination = Scratch::new();
+    let outside = Scratch::new();
+    let root = &destination.0;
+    let nested = root.join("a/b");
+    std::fs::create_dir_all(&nested).unwrap();
+    let mut file = super::platform::create_new_in(root, &nested, "new.bin").unwrap();
+    std::io::Write::write_all(&mut file, b"data").unwrap();
+    assert_eq!(std::fs::read(nested.join("new.bin")).unwrap(), b"data");
+    assert_eq!(
+        super::platform::create_new_in(root, &nested, "new.bin")
+            .unwrap_err()
+            .kind(),
+        std::io::ErrorKind::AlreadyExists
+    );
+    std::os::unix::fs::symlink(&outside.0, nested.join("link")).unwrap();
+    std::fs::rename(root.join("a"), root.join("parked")).unwrap();
+    std::os::unix::fs::symlink(root.join("parked"), root.join("a")).unwrap();
+    std::fs::write(root.join("file"), b"").unwrap();
+    // A symlink as the last folder or above it, and a file where a folder should be.
+    for folder in [
+        root.join("parked/b/link"),
+        root.join("a/b"),
+        root.join("file/b"),
+    ] {
+        let error = super::platform::create_new_in(root, &folder, "new.bin").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("not a real destination directory"),
+            "{folder:?}: {error}"
+        );
+    }
+    assert_eq!(std::fs::read_dir(&outside.0).unwrap().count(), 0);
+    assert!(!root.join("parked/b/link/new.bin").exists());
+}
+
 #[tokio::test]
 async fn cancelled_upload_reports_cleanup_failure() {
     let scratch = Scratch::new();

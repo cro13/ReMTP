@@ -147,11 +147,10 @@ final class AppModel {
         guard pane.viewMode != mode else { return }
         // The old view goes away: if it had the keyboard focus, the new one takes it.
         let hadFocus = tableFocused && activeKind == pane.kind
+        let outgoing = pane.bridge.owner
         pane.viewMode = mode
         defaults.set(mode.rawValue, forKey: Self.viewModeKey(pane.kind))
-        if hadFocus {
-            DispatchQueue.main.async { pane.bridge.focus() }
-        }
+        if hadFocus { pane.bridge.focusReplacement(of: outgoing) }
     }
 
     // MARK: Startup

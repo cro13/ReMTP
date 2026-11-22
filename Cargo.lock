@@ -816,6 +816,7 @@ version = "0.1.1"
 dependencies = [
  "bytes",
  "futures",
+ "libc",
  "mtp-rs",
  "nusb",
  "remtp-adb",

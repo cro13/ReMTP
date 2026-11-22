@@ -1114,7 +1114,9 @@ enum DebugSnapshots {
             let segment = PaneViewMode.allCases.firstIndex(of: mode)
             let ok = await until(2) { installed(device, mode) && control?.selectedSegment == segment }
             let focused = await until(1) { app.tableFocused && window.firstResponder === device.bridge.view }
-            if !(handled && ok && focused) { shortcuts.append(mode.rawValue) }
+            if !(handled && ok && focused) {
+                shortcuts.append("\(mode.rawValue) (handled: \(handled), view and control: \(ok), focus: \(focused))")
+            }
         }
         check("⌘1 / ⌘2 / ⌘3 switch the active pane’s view, the toolbar control follows, the focus stays (failed: \(shortcuts))",
               control != nil && shortcuts.isEmpty && mac.viewMode == .list)

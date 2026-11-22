@@ -84,6 +84,19 @@ final class PaneViewBridge {
         guard let view, let window = view.window else { return }
         window.makeFirstResponder(view)
     }
+
+    /// Focuses the view that replaces `outgoing`'s (a view mode change). SwiftUI makes the new view on a later
+    /// pass and puts it in the window after that; until then `focus()` reaches the outgoing view, which loses the
+    /// focus as it goes, or nothing. So this waits for the new view, for up to a second.
+    func focusReplacement(of outgoing: AnyObject?, until deadline: Date = Date().addingTimeInterval(1)) {
+        if owner !== outgoing, let view, let window = view.window {
+            window.makeFirstResponder(view)
+        } else if Date() < deadline {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak self, weak outgoing] in
+                self?.focusReplacement(of: outgoing, until: deadline)
+            }
+        }
+    }
 }
 
 /// One side of the window: the Mac pane (local file system) or the device pane (DeviceService).

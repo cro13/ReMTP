@@ -26,6 +26,8 @@ clap = { version = "=4.6.7", features = ["derive"] }
 uniffi = "=0.32.2"
 # Already locked through mtp-rs; used directly for ADB interface detection and direct-USB ADB.
 nusb = "=0.2.9"
+# Already locked through core-foundation and tokio; openat for staging downloads (Unix only).
+libc = "=0.2.191"
 # ReMTP's ADB key in the macOS Keychain (remtp-adb, macOS only).
 security-framework = "=3.7.0"
 
