@@ -1,0 +1,20 @@
+/target/
+**/*.rs.bk
+.DS_Store
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+/build/
+/dist/
+apps/macos/Generated/
+apps/macos/Frameworks/
+design/review/
+__pycache__/
+*.py[cod]
+# Local agent and design-tool output
+/skills/
+.impeccable/
+*.dmg
+*.p12
+*.p8
+.env

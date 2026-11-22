@@ -1,0 +1,84 @@
+{
+  "source": "docs/BENCHMARKS.md",
+  "method": {
+    "openmtp_engine": "go-mtpx@18f12db + go-mtpfs@1c3302b (the versions in OpenMTP 3.3.0's kalam.dylib), driven by bench/openmtp-harness without OpenMTP's UI",
+    "patched_engine": "the same engine plus bench/openmtp-harness/zlpfix.patch; not OpenMTP 3.3.0",
+    "data": "random bytes; MB = 10^6 bytes",
+    "time": "wall time in seconds, process start to exit"
+  },
+  "rounds": {
+    "imac-2026-11-19": {
+      "remtp": "0.1.0 pre-release (Nov 19 build, before the public history)",
+      "host": "iMac 2019 (Intel), macOS 15.8"
+    },
+    "studio-2026-11-22": {
+      "remtp": "0.1.0 release candidate (the initial public commit)",
+      "host": "Mac Studio (M4 Max), macOS 27.2.1"
+    }
+  },
+  "engines": {
+    "remtp": "ReMTP",
+    "openmtp": "OpenMTP 3.3.0 engine",
+    "openmtp_zlpfix": "go-mtpfs with the ZLP fix (not OpenMTP 3.3.0)"
+  },
+  "datasets": {
+    "A": { "label": "100 × 30 MB", "files": 100, "bytes_each": 30000000 },
+    "B": { "label": "1,000 × 1 MB", "files": 1000, "bytes_each": 1000000 },
+    "C": { "label": "2 × 1.5 GB", "files": 2, "bytes_each": 1500000000 }
+  },
+  "devices": {
+    "sp3000": { "name": "Astell&Kern SP3000", "os": "Android", "link": "USB 3.2 Gen 1", "round": "imac-2026-11-19", "libusb": "Homebrew libusb 1.0.30" },
+    "lenovo": { "name": "Lenovo Tab TB311FU", "os": "Android 16", "link": "USB 2.0", "round": "imac-2026-11-19", "libusb": "OpenMTP 3.3.0's bundled libusb" },
+    "studio-sp3000": { "name": "Astell&Kern SP3000", "os": "Android", "link": "USB 3.2 Gen 1", "round": "studio-2026-11-22", "libusb": "OpenMTP 3.3.0's bundled libusb" },
+    "studio-tab-s5e": { "name": "Samsung Galaxy Tab S5e", "os": "Android 15", "link": "USB 3.2 Gen 1", "round": "studio-2026-11-22", "libusb": "OpenMTP 3.3.0's bundled libusb" }
+  },
+  "results": [
+    { "device": "sp3000", "dataset": "A", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 21.3, "mb_per_s": 140.8 },
+    { "device": "sp3000", "dataset": "A", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 39.8, "mb_per_s": 75.4 },
+    { "device": "sp3000", "dataset": "A", "direction": "upload", "run": 2, "engine": "remtp", "seconds": 21.3, "mb_per_s": 140.8 },
+    { "device": "sp3000", "dataset": "A", "direction": "upload", "run": 2, "engine": "openmtp", "seconds": 36.4, "mb_per_s": 82.3 },
+    { "device": "sp3000", "dataset": "B", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 45.2, "mb_per_s": 22.1 },
+    { "device": "sp3000", "dataset": "B", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 561.1, "mb_per_s": 1.8 },
+    { "device": "sp3000", "dataset": "C", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 13.7, "mb_per_s": 219.5 },
+    { "device": "sp3000", "dataset": "C", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 27.8, "mb_per_s": 108.0 },
+    { "device": "sp3000", "dataset": "A", "direction": "download", "run": 1, "engine": "remtp", "seconds": 19.2, "mb_per_s": 156.0 },
+    { "device": "sp3000", "dataset": "A", "direction": "download", "run": 1, "engine": "openmtp", "seconds": 30.1, "mb_per_s": 99.5 },
+
+    { "device": "lenovo", "dataset": "A", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 75.3, "mb_per_s": 39.8 },
+    { "device": "lenovo", "dataset": "A", "direction": "upload", "run": 1, "engine": "openmtp", "failed": "LIBUSB_ERROR_TIMEOUT after ~31 s, 0 bytes written" },
+    { "device": "lenovo", "dataset": "A", "direction": "upload", "run": 1, "engine": "openmtp_zlpfix", "seconds": 89.2, "mb_per_s": 33.6 },
+    { "device": "lenovo", "dataset": "A", "direction": "upload", "run": 2, "engine": "remtp", "seconds": 74.6, "mb_per_s": 40.2 },
+    { "device": "lenovo", "dataset": "A", "direction": "upload", "run": 2, "engine": "openmtp", "failed": "LIBUSB_ERROR_TIMEOUT after ~31 s, 0 bytes written" },
+    { "device": "lenovo", "dataset": "A", "direction": "upload", "run": 2, "engine": "openmtp_zlpfix", "seconds": 91.0, "mb_per_s": 33.0 },
+    { "device": "lenovo", "dataset": "B", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 61.6, "mb_per_s": 16.2 },
+    { "device": "lenovo", "dataset": "B", "direction": "upload", "run": 1, "engine": "openmtp", "failed": "LIBUSB_ERROR_TIMEOUT after ~31 s, 0 bytes written" },
+    { "device": "lenovo", "dataset": "B", "direction": "upload", "run": 1, "engine": "openmtp_zlpfix", "seconds": 292.1, "mb_per_s": 3.4 },
+    { "device": "lenovo", "dataset": "C", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 70.5, "mb_per_s": 42.6 },
+    { "device": "lenovo", "dataset": "C", "direction": "upload", "run": 1, "engine": "openmtp", "failed": "LIBUSB_ERROR_TIMEOUT after ~31 s, 0 bytes written" },
+    { "device": "lenovo", "dataset": "C", "direction": "upload", "run": 1, "engine": "openmtp_zlpfix", "seconds": 83.0, "mb_per_s": 36.1 },
+    { "device": "lenovo", "dataset": "A", "direction": "download", "run": 1, "engine": "remtp", "seconds": 87.1, "mb_per_s": 34.5 },
+    { "device": "lenovo", "dataset": "A", "direction": "download", "run": 1, "engine": "openmtp", "seconds": 96.7, "mb_per_s": 31.0 },
+
+    { "device": "studio-sp3000", "dataset": "A", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 31.1, "mb_per_s": 96.4 },
+    { "device": "studio-sp3000", "dataset": "A", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 20.6, "mb_per_s": 145.6 },
+    { "device": "studio-sp3000", "dataset": "A", "direction": "upload", "run": 2, "engine": "remtp", "seconds": 21.4, "mb_per_s": 140.4 },
+    { "device": "studio-sp3000", "dataset": "A", "direction": "upload", "run": 2, "engine": "openmtp", "seconds": 33.3, "mb_per_s": 90.2 },
+    { "device": "studio-sp3000", "dataset": "B", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 863.4, "mb_per_s": 1.2 },
+    { "device": "studio-sp3000", "dataset": "B", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 44.6, "mb_per_s": 22.4 },
+    { "device": "studio-sp3000", "dataset": "C", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 20.4, "mb_per_s": 147.0 },
+    { "device": "studio-sp3000", "dataset": "C", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 13.0, "mb_per_s": 230.8 },
+    { "device": "studio-sp3000", "dataset": "A", "direction": "download", "run": 1, "engine": "remtp", "seconds": 16.5, "mb_per_s": 181.9 },
+    { "device": "studio-sp3000", "dataset": "A", "direction": "download", "run": 1, "engine": "openmtp", "seconds": 21.5, "mb_per_s": 139.8 },
+
+    { "device": "studio-tab-s5e", "dataset": "A", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 171.9, "mb_per_s": 17.4 },
+    { "device": "studio-tab-s5e", "dataset": "A", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 43.8, "mb_per_s": 68.5 },
+    { "device": "studio-tab-s5e", "dataset": "A", "direction": "upload", "run": 2, "engine": "remtp", "seconds": 44.4, "mb_per_s": 67.5 },
+    { "device": "studio-tab-s5e", "dataset": "A", "direction": "upload", "run": 2, "engine": "openmtp", "seconds": 170.0, "mb_per_s": 17.6 },
+    { "device": "studio-tab-s5e", "dataset": "B", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 1380.1, "mb_per_s": 0.7 },
+    { "device": "studio-tab-s5e", "dataset": "B", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 64.1, "mb_per_s": 15.6 },
+    { "device": "studio-tab-s5e", "dataset": "C", "direction": "upload", "run": 1, "engine": "openmtp", "seconds": 60.8, "mb_per_s": 49.4 },
+    { "device": "studio-tab-s5e", "dataset": "C", "direction": "upload", "run": 1, "engine": "remtp", "seconds": 32.5, "mb_per_s": 92.4 },
+    { "device": "studio-tab-s5e", "dataset": "A", "direction": "download", "run": 1, "engine": "remtp", "seconds": 14.5, "mb_per_s": 207.1 },
+    { "device": "studio-tab-s5e", "dataset": "A", "direction": "download", "run": 1, "engine": "openmtp", "seconds": 20.2, "mb_per_s": 148.8 }
+  ]
+}

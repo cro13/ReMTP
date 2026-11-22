@@ -1,0 +1,27 @@
+--- a/mtp/mtp.go
++++ b/mtp/mtp.go
+@@ -529,6 +529,7 @@
+ func (d *Device) bulkWrite(hdr *usbBulkHeader, r io.Reader, size int64, req *Container, progressCb ProgressFunc) (n int64, err error) {
+ 	totalSize := size
+ 	packetSize := d.sendMaxPacketSize()
++	var lastTransfer int // ZLPFIX (diagnostic patch): declared before the header packet
+ 	if hdr != nil {
+ 		if size+usbHdrLen > 0xFFFFFFFF {
+ 			hdr.Length = 0xFFFFFFFF
+@@ -553,7 +554,7 @@
+ 
+ 		_, err = io.CopyN(buf, r, cpSize)
+ 		d.dataPrint(d.sendEP, buf.Bytes())
+-		_, err = d.h.BulkTransfer(d.sendEP, buf.Bytes(), d.Timeout)
++		lastTransfer, err = d.h.BulkTransfer(d.sendEP, buf.Bytes(), d.Timeout) // ZLPFIX: remember header packet length
+ 		if err != nil {
+ 			return cpSize, err
+ 		}
+@@ -566,7 +567,6 @@
+ 	}
+ 
+ 	var buf [rwBufSize]byte
+-	var lastTransfer int
+ 
+ 	for size > 0 {
+ 		var m int

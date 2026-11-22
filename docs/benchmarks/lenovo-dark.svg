@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="750" viewBox="0 0 800 750" role="img" aria-labelledby="t d">
+<title id="t">Stock OpenMTP 3.3.0’s engine can’t upload to this tablet at all (Lenovo Tab TB311FU, USB 2.0)</title>
+<desc id="d">1,000 × 1 MB upload: ReMTP 4.7× faster than the patched engine. ReMTP: 61.6 s, 16.2 MB/s. OpenMTP 3.3.0 engine: fails, timeout, 0 bytes written. go-mtpfs with the ZLP fix (not OpenMTP 3.3.0): 292.1 s (4 min 52 s), 3.4 MB/s. 100 × 30 MB upload (mean of 2 runs): ReMTP 1.2× faster than the patched engine. ReMTP: 75.0 s, 40.0 MB/s. OpenMTP 3.3.0 engine: fails, timeout, 0 bytes written. go-mtpfs with the ZLP fix (not OpenMTP 3.3.0): 90.1 s, 33.3 MB/s. 2 × 1.5 GB upload: ReMTP 1.2× faster than the patched engine. ReMTP: 70.5 s, 42.6 MB/s. OpenMTP 3.3.0 engine: fails, timeout, 0 bytes written. go-mtpfs with the ZLP fix (not OpenMTP 3.3.0): 83.0 s, 36.1 MB/s. 100 × 30 MB download: ReMTP 1.1× faster. ReMTP: 87.1 s, 34.5 MB/s. OpenMTP 3.3.0 engine: 96.7 s, 31.0 MB/s. go-mtpfs with the ZLP fix (not OpenMTP 3.3.0): not measured. 100 × 30 MB upload: mean of the runs (ReMTP 75.3 s, 74.6 s; go-mtpfs with the ZLP fix (not OpenMTP 3.3.0) 89.2 s, 91.0 s). MB/s for a mean is the data size divided by the mean time. The stock engine times out after ~31 s on every upload (LIBUSB_ERROR_TIMEOUT, OpenMTP issue #411). “go-mtpfs with the ZLP fix” is that engine with one bug patched (bench/openmtp-harness/zlpfix.patch); it is not OpenMTP 3.3.0. Method: ReMTP 0.1.0 pre-release (Nov 19 build, before the public history) vs go-mtpx@18f12db + go-mtpfs@1c3302b (the engine inside OpenMTP 3.3.0, run without its UI, with OpenMTP 3.3.0's bundled libusb). iMac 2019 (Intel), macOS 15.8, random data, MB = 10^6 B. Details and raw tables: see docs/BENCHMARKS.md.</desc>
+<style>
+text{font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;font-variant-numeric:tabular-nums}
+.title{font-size:19px;font-weight:600;fill:#f0efec}
+.sub{font-size:13px;fill:#c3c2b7}
+.legend{font-size:13px;fill:#f0efec}
+.row{font-size:14px;font-weight:600;fill:#f0efec}
+.speed{font-size:14px;font-weight:600;fill:#f0efec}
+.series{font-size:12.5px;fill:#f0efec}
+.series-note{font-size:11px;fill:#c3c2b7}
+.value{font-size:13px;font-weight:600;fill:#f0efec}
+.value-2{font-weight:400;fill:#c3c2b7}
+.note{font-size:12.5px;font-style:italic;fill:#c3c2b7}
+.foot{font-size:11.5px;fill:#c3c2b7}
+.hair{stroke:#30363d;stroke-width:1}
+.base{stroke:#6e7681;stroke-width:1}
+.crit-stroke{fill:none;stroke:#d03b3b;stroke-width:1.75;stroke-linecap:round}
+.s-remtp{fill:#3987e5}
+.s-openmtp{fill:#d95926}
+.s-openmtp_zlpfix{fill:#199e70}
+</style>
+<text x="24" y="36" class="title">Stock OpenMTP 3.3.0’s engine can’t upload to this tablet at all</text>
+<text x="24" y="60" class="sub">Lenovo Tab TB311FU (Android 16), USB 2.0. Wall time in seconds: shorter is faster. Each row has its own scale.</text>
+<rect x="24" y="78" width="12" height="12" rx="2" class="s-remtp"/>
+<text x="42" y="88" class="legend">ReMTP</text>
+<rect x="110.33" y="78" width="12" height="12" rx="2" class="s-openmtp"/>
+<text x="128.33" y="88" class="legend">OpenMTP 3.3.0 engine</text>
+<rect x="286.75" y="78" width="12" height="12" rx="2" class="s-openmtp_zlpfix"/>
+<text x="304.75" y="88" class="legend">go-mtpfs with the ZLP fix (not OpenMTP 3.3.0)</text>
+<circle cx="616.2" cy="83.5" r="6.5" class="crit-stroke"/><path d="M613.2 80.5l6 6M619.2 80.5l-6 6" class="crit-stroke"/>
+<text x="628.2" y="88" class="legend">fails (no bar)</text>
+<line x1="24" x2="776" y1="108" y2="108" class="hair"/>
+<text x="24" y="134" class="row">1,000 × 1 MB upload</text>
+<text x="776" y="134" class="speed" text-anchor="end">ReMTP 4.7× faster than the patched engine</text>
+<line x1="188" x2="188" y1="142" y2="222" class="base"/>
+<text x="24" y="158.5" class="series">ReMTP</text>
+<path d="M188 146h67.7a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-67.7z" class="s-remtp"/>
+<text x="267.7" y="158.5" class="value">61.6 s<tspan class="value-2"> · 16.2 MB/s</tspan></text>
+<text x="24" y="186.5" class="series">OpenMTP 3.3.0 engine</text>
+<circle cx="199" cy="182" r="6.5" class="crit-stroke"/><path d="M196 179l6 6M202 179l-6 6" class="crit-stroke"/>
+<text x="210" y="186.5" class="value">fails: timeout, 0 bytes written</text>
+<text x="24" y="209" class="series">go-mtpfs + ZLP fix</text>
+<text x="24" y="222" class="series-note">not OpenMTP 3.3.0</text>
+<path d="M188 202h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp_zlpfix"/>
+<text x="536.0" y="214.5" class="value">292.1 s (4 min 52 s)<tspan class="value-2"> · 3.4 MB/s</tspan></text>
+<line x1="24" x2="776" y1="234" y2="234" class="hair"/>
+<text x="24" y="260" class="row">100 × 30 MB upload (mean of 2 runs)</text>
+<text x="776" y="260" class="speed" text-anchor="end">ReMTP 1.2× faster than the patched engine</text>
+<line x1="188" x2="188" y1="268" y2="348" class="base"/>
+<text x="24" y="284.5" class="series">ReMTP</text>
+<path d="M188 272h278.8a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-278.8z" class="s-remtp"/>
+<text x="478.8" y="284.5" class="value">75.0 s<tspan class="value-2"> · 40.0 MB/s</tspan></text>
+<text x="24" y="312.5" class="series">OpenMTP 3.3.0 engine</text>
+<circle cx="199" cy="308" r="6.5" class="crit-stroke"/><path d="M196 305l6 6M202 305l-6 6" class="crit-stroke"/>
+<text x="210" y="312.5" class="value">fails: timeout, 0 bytes written</text>
+<text x="24" y="335" class="series">go-mtpfs + ZLP fix</text>
+<text x="24" y="348" class="series-note">not OpenMTP 3.3.0</text>
+<path d="M188 328h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp_zlpfix"/>
+<text x="536.0" y="340.5" class="value">90.1 s<tspan class="value-2"> · 33.3 MB/s</tspan></text>
+<line x1="24" x2="776" y1="360" y2="360" class="hair"/>
+<text x="24" y="386" class="row">2 × 1.5 GB upload</text>
+<text x="776" y="386" class="speed" text-anchor="end">ReMTP 1.2× faster than the patched engine</text>
+<line x1="188" x2="188" y1="394" y2="474" class="base"/>
+<text x="24" y="410.5" class="series">ReMTP</text>
+<path d="M188 398h284.8a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-284.8z" class="s-remtp"/>
+<text x="484.8" y="410.5" class="value">70.5 s<tspan class="value-2"> · 42.6 MB/s</tspan></text>
+<text x="24" y="438.5" class="series">OpenMTP 3.3.0 engine</text>
+<circle cx="199" cy="434" r="6.5" class="crit-stroke"/><path d="M196 431l6 6M202 431l-6 6" class="crit-stroke"/>
+<text x="210" y="438.5" class="value">fails: timeout, 0 bytes written</text>
+<text x="24" y="461" class="series">go-mtpfs + ZLP fix</text>
+<text x="24" y="474" class="series-note">not OpenMTP 3.3.0</text>
+<path d="M188 454h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp_zlpfix"/>
+<text x="536.0" y="466.5" class="value">83.0 s<tspan class="value-2"> · 36.1 MB/s</tspan></text>
+<line x1="24" x2="776" y1="486" y2="486" class="hair"/>
+<text x="24" y="512" class="row">100 × 30 MB download</text>
+<text x="776" y="512" class="speed" text-anchor="end">ReMTP 1.1× faster</text>
+<line x1="188" x2="188" y1="520" y2="600" class="base"/>
+<text x="24" y="536.5" class="series">ReMTP</text>
+<path d="M188 524h302.2a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-302.2z" class="s-remtp"/>
+<text x="502.2" y="536.5" class="value">87.1 s<tspan class="value-2"> · 34.5 MB/s</tspan></text>
+<text x="24" y="564.5" class="series">OpenMTP 3.3.0 engine</text>
+<path d="M188 552h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp"/>
+<text x="536.0" y="564.5" class="value">96.7 s<tspan class="value-2"> · 31.0 MB/s</tspan></text>
+<text x="24" y="587" class="series">go-mtpfs + ZLP fix</text>
+<text x="24" y="600" class="series-note">not OpenMTP 3.3.0</text>
+<text x="196" y="592.5" class="note">not measured</text>
+<line x1="24" x2="776" y1="612" y2="612" class="hair"/>
+<text x="24" y="634" class="foot">100 × 30 MB upload: mean of the runs (ReMTP 75.3 s, 74.6 s; go-mtpfs with the ZLP fix (not OpenMTP 3.3.0) 89.2 s, 91.0 s).</text>
+<text x="24" y="650" class="foot">MB/s for a mean is the data size divided by the mean time.</text>
+<text x="24" y="666" class="foot">The stock engine times out after ~31 s on every upload (LIBUSB_ERROR_TIMEOUT, OpenMTP issue #411). “go-mtpfs with the</text>
+<text x="24" y="682" class="foot">ZLP fix” is that engine with one bug patched (bench/openmtp-harness/zlpfix.patch); it is not OpenMTP 3.3.0.</text>
+<text x="24" y="698" class="foot">Method: ReMTP 0.1.0 pre-release (Nov 19 build, before the public history) vs go-mtpx@18f12db + go-mtpfs@1c3302b (the engine inside</text>
+<text x="24" y="714" class="foot">OpenMTP 3.3.0, run without its UI, with OpenMTP 3.3.0's bundled libusb). iMac 2019 (Intel), macOS 15.8, random data, MB = 10^6 B. Details</text>
+<text x="24" y="730" class="foot">and raw tables: see docs/BENCHMARKS.md.</text>
+</svg>

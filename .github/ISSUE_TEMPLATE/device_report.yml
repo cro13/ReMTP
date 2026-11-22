@@ -1,0 +1,51 @@
+name: Device report
+description: Tell us how ReMTP works with your phone, tablet or player, even if it just works.
+labels: [device-report]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Maker, model and Android version.
+      placeholder: Astell&Kern SP3000, firmware 1.51
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS version
+      placeholder: iMac 2019 (Intel), macOS 15.8
+    validations:
+      required: true
+  - type: input
+    id: cable
+    attributes:
+      label: Cable and port
+      placeholder: USB-C to USB-C, directly into the Mac (no hub)
+  - type: dropdown
+    id: result
+    attributes:
+      label: Does it work?
+      options:
+        - Everything I tried works
+        - Works with problems
+        - Doesn't connect
+    validations:
+      required: true
+  - type: textarea
+    id: info
+    attributes:
+      label: Output of `remtp info <device>`
+      description: Remove serial numbers (the device ID after the name can contain one), usernames and personal paths before posting.
+      render: text
+  - type: textarea
+    id: bench
+    attributes:
+      label: Output of `remtp bench <device> <storage> /Download/remtp-bench --files 100 --size-mb 30`
+      description: Remove usernames and personal paths before posting.
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Storages used (internal, SD card), problems, how other apps compare.

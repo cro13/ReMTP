@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            target
+          key: cargo-${{ matrix.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Install toolchain
+        run: rustup toolchain install && rustup show active-toolchain
+      - name: Format
+        if: matrix.os == 'macos-15'
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+
+  macos-app:
+    name: macOS app (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            target
+          key: cargo-app-${{ matrix.runner }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Select Xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
+      - name: Install toolchain and XcodeGen
+        run: rustup toolchain install && brew install xcodegen
+      - name: Build Rust core and Swift bindings
+        run: scripts/build-macos-core.sh --arch ${{ matrix.arch }}
+      - name: Build app
+        working-directory: apps/macos
+        run: |
+          xcodegen generate
+          xcodebuild -project ReMTP.xcodeproj -scheme ReMTP -configuration Debug \
+            -destination "generic/platform=macOS" -derivedDataPath "$RUNNER_TEMP/dd" \
+            ARCHS=${{ matrix.arch }} ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+      # The app's own self-check with the demo backend (prints PASS/FAIL lines, exits non-zero on a FAIL).
+      # arm64 only: the linker's ad-hoc signature lets the unsigned build run there.
+      - name: Self-check
+        if: matrix.arch == 'arm64'
+        timeout-minutes: 12
+        run: |
+          app="$RUNNER_TEMP/dd/Build/Products/Debug/ReMTP.app"
+          log="$RUNNER_TEMP/shots/self-check.log"
+          mkdir -p "$RUNNER_TEMP/shots"
+          status=0
+          NSUnbufferedIO=YES REMTP_SNAPSHOT_DIR="$RUNNER_TEMP/shots" REMTP_SNAPSHOT_MAC_PATH="$(mktemp -d)" \
+            perl -e 'alarm 600; exec @ARGV' "$app/Contents/MacOS/ReMTP" > "$log" 2>&1 || status=$?
+          cat "$log"
+          echo "passed: $(grep -c '^PASS' "$log" || true), failed: $(grep -c '^FAIL' "$log" || true), exit: $status"
+          if grep -q '^FAIL' "$log"; then echo "::error::Self-check failed:"; grep '^FAIL' "$log"; exit 1; fi
+          grep -q '^PASS' "$log" || { echo "::error::Self-check printed no PASS line"; exit 1; }
+          [[ $status -eq 0 ]] || { echo "::error::ReMTP exited with status $status (142: killed after 600 s)"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure() && matrix.arch == 'arm64'
+        with:
+          name: self-check-shots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore

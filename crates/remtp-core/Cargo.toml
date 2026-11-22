@@ -1,0 +1,21 @@
+[package]
+name = "remtp-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+mtp-rs.workspace = true
+tokio.workspace = true
+futures.workspace = true
+bytes.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+unicode-normalization.workspace = true
+nusb.workspace = true
+remtp-adb = { path = "../remtp-adb" }
+
+[dev-dependencies]
+mtp-rs = { workspace = true, features = ["virtual-device"] }

@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="606" viewBox="0 0 800 606" role="img" aria-labelledby="t d">
+<title id="t">ReMTP uploads 1,000 small files 19.4× faster than OpenMTP’s engine (Astell&amp;Kern SP3000, USB 3.2 Gen 1)</title>
+<desc id="d">1,000 × 1 MB upload: ReMTP 19.4× faster. ReMTP: 44.6 s, 22.4 MB/s. OpenMTP 3.3.0 engine: 863.4 s (14 min 23 s), 1.2 MB/s. 100 × 30 MB upload (mean of 2 runs): ReMTP 1.5× faster. ReMTP: 21.0 s, 142.9 MB/s. OpenMTP 3.3.0 engine: 32.2 s, 93.2 MB/s. 2 × 1.5 GB upload: ReMTP 1.6× faster. ReMTP: 13.0 s, 230.8 MB/s. OpenMTP 3.3.0 engine: 20.4 s, 147.0 MB/s. 100 × 30 MB download: ReMTP 1.3× faster. ReMTP: 16.5 s, 181.9 MB/s. OpenMTP 3.3.0 engine: 21.5 s, 139.8 MB/s. 100 × 30 MB upload: mean of the runs (ReMTP 20.6 s, 21.4 s; OpenMTP 3.3.0 engine 31.1 s, 33.3 s). MB/s for a mean is the data size divided by the mean time. Method: ReMTP 0.1.0 release candidate (the initial public commit) vs go-mtpx@18f12db + go-mtpfs@1c3302b (the engine inside OpenMTP 3.3.0, run without its UI, with OpenMTP 3.3.0's bundled libusb). Mac Studio (M4 Max), macOS 27.2.1, random data, MB = 10^6 B. Details and raw tables: see docs/BENCHMARKS.md.</desc>
+<style>
+text{font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;font-variant-numeric:tabular-nums}
+.title{font-size:19px;font-weight:600;fill:#0b0b0b}
+.sub{font-size:13px;fill:#52514e}
+.legend{font-size:13px;fill:#0b0b0b}
+.row{font-size:14px;font-weight:600;fill:#0b0b0b}
+.speed{font-size:14px;font-weight:600;fill:#0b0b0b}
+.series{font-size:12.5px;fill:#0b0b0b}
+.series-note{font-size:11px;fill:#52514e}
+.value{font-size:13px;font-weight:600;fill:#0b0b0b}
+.value-2{font-weight:400;fill:#52514e}
+.note{font-size:12.5px;font-style:italic;fill:#52514e}
+.foot{font-size:11.5px;fill:#52514e}
+.hair{stroke:#e1e0d9;stroke-width:1}
+.base{stroke:#a8a79f;stroke-width:1}
+.crit-stroke{fill:none;stroke:#d03b3b;stroke-width:1.75;stroke-linecap:round}
+.s-remtp{fill:#2a78d6}
+.s-openmtp{fill:#eb6834}
+.s-openmtp_zlpfix{fill:#1baf7a}
+</style>
+<text x="24" y="36" class="title">ReMTP uploads 1,000 small files 19.4× faster than OpenMTP’s engine</text>
+<text x="24" y="60" class="sub">Astell&amp;Kern SP3000 (Android), USB 3.2 Gen 1. Wall time in seconds: shorter is faster. Each row has its own scale.</text>
+<rect x="24" y="78" width="12" height="12" rx="2" class="s-remtp"/>
+<text x="42" y="88" class="legend">ReMTP</text>
+<rect x="110.33" y="78" width="12" height="12" rx="2" class="s-openmtp"/>
+<text x="128.33" y="88" class="legend">OpenMTP 3.3.0 engine</text>
+<line x1="24" x2="776" y1="108" y2="108" class="hair"/>
+<text x="24" y="134" class="row">1,000 × 1 MB upload</text>
+<text x="776" y="134" class="speed" text-anchor="end">ReMTP 19.4× faster</text>
+<line x1="188" x2="188" y1="142" y2="194" class="base"/>
+<text x="24" y="158.5" class="series">ReMTP</text>
+<path d="M188 146h13.6a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-13.6z" class="s-remtp"/>
+<text x="213.6" y="158.5" class="value">44.6 s<tspan class="value-2"> · 22.4 MB/s</tspan></text>
+<text x="24" y="186.5" class="series">OpenMTP 3.3.0 engine</text>
+<path d="M188 174h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp"/>
+<text x="536.0" y="186.5" class="value">863.4 s (14 min 23 s)<tspan class="value-2"> · 1.2 MB/s</tspan></text>
+<line x1="24" x2="776" y1="206" y2="206" class="hair"/>
+<text x="24" y="232" class="row">100 × 30 MB upload (mean of 2 runs)</text>
+<text x="776" y="232" class="speed" text-anchor="end">ReMTP 1.5× faster</text>
+<line x1="188" x2="188" y1="240" y2="292" class="base"/>
+<text x="24" y="256.5" class="series">ReMTP</text>
+<path d="M188 244h217.7a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-217.7z" class="s-remtp"/>
+<text x="417.7" y="256.5" class="value">21.0 s<tspan class="value-2"> · 142.9 MB/s</tspan></text>
+<text x="24" y="284.5" class="series">OpenMTP 3.3.0 engine</text>
+<path d="M188 272h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp"/>
+<text x="536.0" y="284.5" class="value">32.2 s<tspan class="value-2"> · 93.2 MB/s</tspan></text>
+<line x1="24" x2="776" y1="304" y2="304" class="hair"/>
+<text x="24" y="330" class="row">2 × 1.5 GB upload</text>
+<text x="776" y="330" class="speed" text-anchor="end">ReMTP 1.6× faster</text>
+<line x1="188" x2="188" y1="338" y2="390" class="base"/>
+<text x="24" y="354.5" class="series">ReMTP</text>
+<path d="M188 342h212.7a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-212.7z" class="s-remtp"/>
+<text x="412.7" y="354.5" class="value">13.0 s<tspan class="value-2"> · 230.8 MB/s</tspan></text>
+<text x="24" y="382.5" class="series">OpenMTP 3.3.0 engine</text>
+<path d="M188 370h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp"/>
+<text x="536.0" y="382.5" class="value">20.4 s<tspan class="value-2"> · 147.0 MB/s</tspan></text>
+<line x1="24" x2="776" y1="402" y2="402" class="hair"/>
+<text x="24" y="428" class="row">100 × 30 MB download</text>
+<text x="776" y="428" class="speed" text-anchor="end">ReMTP 1.3× faster</text>
+<line x1="188" x2="188" y1="436" y2="488" class="base"/>
+<text x="24" y="452.5" class="series">ReMTP</text>
+<path d="M188 440h256.9a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-256.9z" class="s-remtp"/>
+<text x="456.9" y="452.5" class="value">16.5 s<tspan class="value-2"> · 181.9 MB/s</tspan></text>
+<text x="24" y="480.5" class="series">OpenMTP 3.3.0 engine</text>
+<path d="M188 468h336a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-336z" class="s-openmtp"/>
+<text x="536.0" y="480.5" class="value">21.5 s<tspan class="value-2"> · 139.8 MB/s</tspan></text>
+<line x1="24" x2="776" y1="500" y2="500" class="hair"/>
+<text x="24" y="522" class="foot">100 × 30 MB upload: mean of the runs (ReMTP 20.6 s, 21.4 s; OpenMTP 3.3.0 engine 31.1 s, 33.3 s).</text>
+<text x="24" y="538" class="foot">MB/s for a mean is the data size divided by the mean time.</text>
+<text x="24" y="554" class="foot">Method: ReMTP 0.1.0 release candidate (the initial public commit) vs go-mtpx@18f12db + go-mtpfs@1c3302b (the engine inside OpenMTP</text>
+<text x="24" y="570" class="foot">3.3.0, run without its UI, with OpenMTP 3.3.0's bundled libusb). Mac Studio (M4 Max), macOS 27.2.1, random data, MB = 10^6 B. Details and</text>
+<text x="24" y="586" class="foot">raw tables: see docs/BENCHMARKS.md.</text>
+</svg>

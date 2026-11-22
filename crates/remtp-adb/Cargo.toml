@@ -1,0 +1,15 @@
+[package]
+name = "remtp-adb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Direct-USB ADB for ReMTP: adbd's wire protocol, RSA auth and ReMTP's own key, without an adb server."
+
+[dependencies]
+nusb.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework.workspace = true

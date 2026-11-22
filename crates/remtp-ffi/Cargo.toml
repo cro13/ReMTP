@@ -1,0 +1,26 @@
+[package]
+name = "remtp-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+remtp-core = { path = "../remtp-core" }
+tokio.workspace = true
+futures.workspace = true
+uniffi.workspace = true
+thiserror.workspace = true
+
+[lib]
+name = "remtp_ffi"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[features]
+cli = ["uniffi/cli"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bindgen.rs"
+required-features = ["cli"]

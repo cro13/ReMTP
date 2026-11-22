@@ -1,0 +1,56 @@
+name: Screenshots
+
+# Renders the app's own screens (design/app-shots.sh) from a Debug build with the demo backend and
+# uploads them as an artifact. It doesn't commit: download the artifact and copy the files into
+# design/screenshots/ yourself.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  screenshots:
+    name: App screenshots
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Same key as CI's arm64 macos-app job, so a run on main reuses its cache.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            target
+          key: cargo-app-macos-15-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Select Xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
+      - name: Install toolchain and XcodeGen
+        run: rustup toolchain install && brew install xcodegen
+      - name: Build Rust core and Swift bindings
+        run: scripts/build-macos-core.sh --arch arm64
+      - name: Build app
+        working-directory: apps/macos
+        run: |
+          xcodegen generate
+          xcodebuild -project ReMTP.xcodeproj -scheme ReMTP -configuration Debug \
+            -destination "generic/platform=macOS" -derivedDataPath "$RUNNER_TEMP/dd" \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+      # Only the PNGs this run wrote are uploaded, so a missing screen can't hide behind a committed one.
+      - name: Render screenshots
+        timeout-minutes: 15
+        run: |
+          touch "$RUNNER_TEMP/before-shots"
+          design/app-shots.sh "$RUNNER_TEMP/dd/Build/Products/Debug/ReMTP.app"
+          mkdir -p "$RUNNER_TEMP/screenshots"
+          find design/screenshots -maxdepth 1 -name '*.png' -newer "$RUNNER_TEMP/before-shots" -exec cp {} "$RUNNER_TEMP/screenshots/" \;
+          ls -la "$RUNNER_TEMP/screenshots"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screenshots
+          path: ${{ runner.temp }}/screenshots/*.png
+          if-no-files-found: error
