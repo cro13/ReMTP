@@ -30,7 +30,7 @@ ReMTP/
               device access prompt), Transfers (bar, drawer, speed graph), Inspector, Sync (preview sheet)
   Support/    Format, Thumbnails (QuickLookThumbnailing), QuickLookController, off-main helpers,
               DebugSnapshots (DEBUG only)
-scripts/make-icon.swift   renders the placeholder app icon
+scripts/make-icon.swift   renders the app icon
 ```
 
 ## Backends
