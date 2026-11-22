@@ -143,6 +143,16 @@ enum USBDeviceIdentity {
         guard parts.count == 3, !parts[0].isEmpty, !parts[2].isEmpty, !parts[2].hasPrefix("loc") else { return nil }
         return "\(parts[0]):\(parts[2])"
     }
+
+    /// "vendor:product" for an id made from the USB port ("vendor:product:loc" and 16 hex digits, what the core
+    /// uses when a device has no usable serial number); nil for every other id.
+    static func portModel(for id: String) -> String? {
+        let parts = id.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, !parts[0].isEmpty, !parts[1].isEmpty, parts[2].hasPrefix("loc") else { return nil }
+        let location = parts[2].dropFirst(3)
+        guard location.count == 16, location.allSatisfy(\.isHexDigit) else { return nil }
+        return "\(parts[0]):\(parts[1])"
+    }
 }
 
 /// Where the app keeps what it learns about devices (known devices, names). Demo runs and the Debug
@@ -215,6 +225,45 @@ final class KnownDevices {
         save()
         saveNames()
         return true
+    }
+
+    /// A device without a usable serial number is known by its USB port, so on another port, cable or hub it
+    /// comes back with a new id, and each old one stayed behind as a "Not connected" row. ReMTP can't tell
+    /// such devices of one model apart, so it keeps one entry per vendor and product: the newest, moved to
+    /// `id` when that is the device connecting now (its name and auto-release go with it). Entries in
+    /// `connected` stay, since those devices are plugged in. True if anything changed.
+    @discardableResult
+    func mergePortIDs(into id: String? = nil, connected: Set<String> = []) -> Bool {
+        let connected = connected.subtracting(id.map { [$0] } ?? [])
+        var groups: [String: [KnownDevice]] = [:]
+        for entry in all.values where !connected.contains(entry.id) {
+            if let model = USBDeviceIdentity.portModel(for: entry.id) { groups[model, default: []].append(entry) }
+        }
+        var changed = false
+        for (model, entries) in groups {
+            guard let newest = entries.max(by: { $0.lastSeen < $1.lastSeen }) else { continue }
+            let keep = id.flatMap { USBDeviceIdentity.portModel(for: $0) == model ? $0 : nil } ?? newest.id
+            guard entries.contains(where: { $0.id != keep }) else { continue }
+            if newest.id != keep {
+                var entry = all[keep] ?? newest
+                entry.id = keep
+                entry.autoRelease = newest.autoRelease
+                // The link speed belongs to the old port; the new one's is recorded when the device opens.
+                if all[keep] == nil { entry.linkSpeed = nil }
+                all[keep] = entry
+                customNames[keep] = customNames[newest.id]
+            }
+            for entry in entries where entry.id != keep {
+                all[entry.id] = nil
+                customNames[entry.id] = nil
+            }
+            changed = true
+        }
+        if changed {
+            save()
+            saveNames()
+        }
+        return changed
     }
 
     func customName(_ id: String) -> String? { customNames[id] }

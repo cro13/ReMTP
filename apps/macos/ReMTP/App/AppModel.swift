@@ -102,6 +102,8 @@ final class AppModel {
         if !demo, known.purge(DemoDeviceService.deviceIDs) {
             NSLog("ReMTP: removed demo devices from the known devices")
         }
+        // Earlier versions kept a device without a serial number once per USB port it was ever used on.
+        known.mergePortIDs()
         let fm = FileManager.default
         func place(_ directory: FileManager.SearchPathDirectory, _ title: String, _ image: String) -> MacPlace? {
             fm.urls(for: directory, in: .userDomainMask).first.map { MacPlace(url: $0.standardizedFileURL, title: title, systemImage: image) }
@@ -348,6 +350,9 @@ final class AppModel {
     /// shown when the pane has no device yet.
     func connect(_ ref: DeviceRef, reveal: Bool = false) {
         guard !isShuttingDown, usbModeChange?.sourceID != ref.id else { return }
+        // On another port, a device without a serial number has a new id: it keeps its name and settings, and
+        // the old port's entry doesn't stay behind as a "Not connected" row.
+        if known.mergePortIDs(into: ref.id, connected: Set(devices.map(\.id))) { knownVersion &+= 1 }
         let session: DeviceSession
         if let existing = self.session(for: ref.id) {
             session = existing
