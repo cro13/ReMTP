@@ -1,4 +1,4 @@
-use std::fs::{File, FileTimes, OpenOptions};
+use std::fs::{File, FileTimes};
 use std::io::{self, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
@@ -695,12 +695,8 @@ fn write_one_file(
                 DrainOutcome::None => Some(outcome(0, Err(error))),
             };
         }
-        match OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-        {
+        // Not by path: the folder checked above may have been swapped for a symlink since.
+        match platform::create_new_in(root, folder, &work.temp) {
             Ok(destination) => break (work, temp, destination),
             Err(error) => {
                 let forget = journal.forget_sync(&work.temp);

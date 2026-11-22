@@ -161,6 +161,70 @@ pub(super) fn volume(path: &Path) -> io::Result<String> {
     Ok(String::from_utf16_lossy(id.split(|&c| c == 0).next().unwrap()).to_lowercase())
 }
 
+/// Creates the file `name` (read-write, failing if it exists) in `folder`, a folder below `root`, without
+/// following a symlink below `root`. Checking the folders and then opening `folder/name` by path left a window:
+/// a folder swapped for a symlink in between sent the file outside the destination. Here each folder is opened
+/// with `O_NOFOLLOW` and the file is created relative to the last one, so it lands in the folder that was
+/// checked or nowhere. `root` itself may be reached through a symlink (as /tmp is on macOS).
+#[cfg(unix)]
+pub(super) fn create_new_in(root: &Path, folder: &Path, name: &str) -> io::Result<File> {
+    use std::ffi::OsStr;
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::path::Component;
+
+    fn open_at(dir: &OwnedFd, name: &OsStr, flags: libc::c_int) -> io::Result<OwnedFd> {
+        let name = std::ffi::CString::new(name.as_bytes())?;
+        let flags = flags | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+        let fd =
+            unsafe { libc::openat(dir.as_raw_fd(), name.as_ptr(), flags, 0o666 as libc::c_uint) };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+    }
+
+    let mut dir: OwnedFd = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY)
+        .open(root)?
+        .into();
+    let mut path = root.to_path_buf();
+    for component in folder
+        .strip_prefix(root)
+        .map_err(io::Error::other)?
+        .components()
+    {
+        let Component::Normal(part) = component else {
+            return Err(io::Error::other("invalid destination folder component"));
+        };
+        path.push(part);
+        dir =
+            open_at(&dir, part, libc::O_RDONLY | libc::O_DIRECTORY).map_err(|error| match error
+                .raw_os_error()
+            {
+                Some(libc::ELOOP | libc::ENOTDIR) => io::Error::other(format!(
+                    "not a real destination directory: {}",
+                    path.display()
+                )),
+                _ => error,
+            })?;
+    }
+    let flags = libc::O_RDWR | libc::O_CREAT | libc::O_EXCL;
+    Ok(File::from(open_at(&dir, OsStr::new(name), flags)?))
+}
+
+/// Windows still creates the file by path, after `check_local_folder`; the window above remains there.
+#[cfg(not(unix))]
+pub(super) fn create_new_in(_root: &Path, folder: &Path, name: &str) -> io::Result<File> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(folder.join(name))
+}
+
 #[cfg(not(any(unix, windows)))]
 pub(super) fn volume(_path: &Path) -> io::Result<String> {
     Err(no_exclusive_rename())

@@ -17,5 +17,8 @@ unicode-normalization.workspace = true
 nusb.workspace = true
 remtp-adb = { path = "../remtp-adb" }
 
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
 [dev-dependencies]
 mtp-rs = { workspace = true, features = ["virtual-device"] }
