@@ -240,6 +240,7 @@ enum DebugSnapshots {
             if let companion { try? FileManager.default.removeItem(at: companion) }
 
             await nameChecks(app: app, shot: shot)
+            portIDChecks()
             await dropChecks(app: app, macPath: macPath, shot: shot)
             await viewModeChecks(app: app, macPath: macPath, shot: shot)
             syncVisibilityCheck(app: app)
@@ -711,6 +712,39 @@ enum DebugSnapshots {
         check("Renaming to its own name or to nothing goes back to the device’s name",
               sameAsOwn && renamed && session?.name == "SP3000" && session?.customName == nil
               && AppDefaults.store(demo: true).dictionary(forKey: KnownDevices.namesKey)?[sp3000] == nil)
+    }
+
+    /// A device without a serial number is known by its USB port: on another port it is still one known device.
+    private static func portIDChecks() {
+        let suite = "io.github.cro13.ReMTP.selfcheck-ports"
+        guard let defaults = UserDefaults(suiteName: suite) else { return check("Port ids: a scratch defaults suite", false) }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        func player(_ location: String) -> DeviceRef {
+            DeviceRef(id: "4102:1232:loc\(location)", manufacturer: "Dreamus Company", model: "SP3000", name: "SP3000", serial: "")
+        }
+        let usb2 = player("c513c4f9edcecb55"), usb3 = player("e8b984f0e31dbf26"), hub = player("0000000000000003")
+        let phone = DeviceRef(id: "04e8:6860:R5CW30ABCDE", manufacturer: "Samsung", model: "SM-S911B", name: "Galaxy", serial: "R5CW30ABCDE")
+        let known = KnownDevices(defaults: defaults)
+        known.remember(usb2, linkSpeed: "USB 2.0")
+        known.setCustomName("Player", for: usb2.id)
+        known.setAutoRelease(usb2.id, ref: usb2, true)
+        known.remember(phone, linkSpeed: nil)
+        known.mergePortIDs(into: usb3.id)
+        let moved = Set(known.all.keys) == [usb3.id, phone.id] && known.customName(usb3.id) == "Player"
+            && known.autoRelease(usb3.id) && known.all[usb3.id]?.linkSpeed == nil && known.customName(usb2.id) == nil
+        known.remember(usb3, linkSpeed: "USB 3.2 Gen 1")
+        known.mergePortIDs(into: hub.id, connected: [usb3.id])
+        known.remember(hub, linkSpeed: nil)
+        let bothPlugged = known.all[usb3.id] != nil && known.all[hub.id] != nil
+        // The entries of earlier versions, one per port, collapse to the newest on launch.
+        let relaunched = KnownDevices(defaults: defaults)
+        relaunched.mergePortIDs()
+        let portEntries = relaunched.all.keys.filter { USBDeviceIdentity.portModel(for: $0) != nil }
+        check("Port ids: on another port, a device without a serial number keeps its name and settings and leaves no “Not connected” twin; two plugged in at once both stay; older twins collapse on launch",
+              moved && bothPlugged && portEntries.count == 1 && relaunched.all[phone.id] != nil
+              && USBDeviceIdentity.portModel(for: usb2.id) == "4102:1232" && USBDeviceIdentity.portModel(for: phone.id) == nil
+              && USBDeviceIdentity.portModel(for: "4102:1232:locus-1234") == nil)
     }
 
     // MARK: Drag and drop
