@@ -5,6 +5,7 @@ players. Two panes, Mac on one side and the device on the other, with copying th
 between files.
 
 [![CI](https://github.com/cro13/ReMTP/actions/workflows/ci.yml/badge.svg)](https://github.com/cro13/ReMTP/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/cro13/ReMTP)](https://github.com/cro13/ReMTP/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-lightgrey.svg)
 
@@ -76,8 +77,7 @@ including a tablet that stock OpenMTP can't upload to at all, plus the method an
 
 ## Install
 
-The first signed release (0.1.0) isn't out yet; until it is, [build from source](#build-from-source).
-Releases will be on the [Releases](https://github.com/cro13/ReMTP/releases) page:
+Download the [latest release](https://github.com/cro13/ReMTP/releases/latest):
 
 - `ReMTP-<version>-macos-arm64.dmg` (Apple Silicon) or `ReMTP-<version>-macos-x86_64.dmg` (Intel).
   macOS 14 or later. Every DMG is Developer ID signed and notarized.
