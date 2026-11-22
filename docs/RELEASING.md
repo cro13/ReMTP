@@ -2,11 +2,16 @@
 
 Releases are macOS only for now; the Rust core keeps building and testing on Windows in CI.
 
-Push a version tag; GitHub Actions builds everything and creates a **draft** release:
+Merging to `main` never releases. Bump the version, then push a version tag; GitHub Actions builds
+everything and creates a **draft** release:
 
 ```sh
-git tag v0.1.0 && git push origin v0.1.0
+# version in the root Cargo.toml (the CLI's --version) and MARKETING_VERSION in apps/macos/project.yml
+cargo update --workspace   # the workspace crates' versions in Cargo.lock
+git tag v0.1.1 && git push origin v0.1.1
 ```
+
+The release build takes the app's version from the tag.
 
 A tag run needs all five signing secrets below. If any is missing it fails in the first job, before any
 macOS build, and `scripts/ci/sign-macos.sh` refuses to package a tag build that isn't Developer ID signed

@@ -32,7 +32,7 @@ targets:
       base:
         PRODUCT_NAME: ReMTP
         PRODUCT_BUNDLE_IDENTIFIER: io.github.cro13.ReMTP
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "0.1.1"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         # Merged with the generated keys: the exported pasteboard type for device rows.

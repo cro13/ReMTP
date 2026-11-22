@@ -794,7 +794,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "remtp-adb"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "nusb",
  "security-framework",
@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "remtp-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "remtp-core",
@@ -812,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "remtp-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "futures",
@@ -827,7 +827,7 @@ dependencies = [
 
 [[package]]
 name = "remtp-ffi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "remtp-core",
