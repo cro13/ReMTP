@@ -107,6 +107,37 @@ async fn read_friendly_name(location: u64) -> Option<String> {
     }
 }
 
+/// How long one wait for a device event lasts, and the pause between two waits.
+///
+/// mtp-rs holds the USB interrupt pipe for the whole of a wait, and a cancel needs that pipe too.
+/// That includes the recovery mtp-rs runs before the next operation after a failed read. With one
+/// endless wait, a cancel on a device that sent no event never finished, and `remtp pull` hung
+/// after a USB error (issue #1). The pause lets a waiting cancel take the pipe first. An event that
+/// arrives meanwhile stays queued on the pipe, and the next wait reads it.
+const EVENT_WAIT: Duration = Duration::from_millis(500);
+const EVENT_PAUSE: Duration = Duration::from_millis(50);
+
+/// macOS reports some USB failures only as an IOReturn code ("unknown (error 0xe00002e8)").
+/// Names the ones a cable or port can cause, so the message says what to try.
+fn describe_io(message: String) -> String {
+    const CABLE: &str =
+        "a USB 2.0 or worn cable, or a hub, often causes this: try another cable or port";
+    let known = [
+        (
+            "0xe00002e8",
+            "USB overrun (kIOReturnOverrun): the device sent more data than the read asked for",
+        ),
+        (
+            "0xe00002e7",
+            "USB underrun (kIOReturnUnderrun): the device sent less data than it announced",
+        ),
+    ];
+    match known.iter().find(|(code, _)| message.contains(code)) {
+        Some((_, what)) => format!("{what}; {CABLE}"),
+        None => message,
+    }
+}
+
 pub(crate) fn mtp_error(error: Error, path: &str) -> RemtpError {
     if error.is_exclusive_access() {
         return RemtpError::DeviceBusy {
@@ -120,7 +151,9 @@ pub(crate) fn mtp_error(error: Error, path: &str) -> RemtpError {
         Error::Cancelled => RemtpError::Cancelled,
         Error::NotFound => RemtpError::NotFound { path: path.into() },
         Error::AlreadyExists => RemtpError::AlreadyExists { path: path.into() },
-        Error::Io { message } => RemtpError::Io { message },
+        Error::Io { message } => RemtpError::Io {
+            message: describe_io(message),
+        },
         Error::StorageFull => RemtpError::NoSpace,
         Error::StaleHandle => RemtpError::StaleHandle,
         _ => RemtpError::Protocol {
@@ -606,7 +639,13 @@ impl Transport for MtpTransport {
     fn events(&self) -> BoxStream<'static, Event> {
         futures::stream::unfold(self.device.clone(), |device| async move {
             loop {
-                let event = match device.next_event().await {
+                // Dropping a timed-out wait frees the pipe but leaves its read queued, so no event
+                // is lost (see `EVENT_WAIT`).
+                let Ok(next) = tokio::time::timeout(EVENT_WAIT, device.next_event()).await else {
+                    tokio::time::sleep(EVENT_PAUSE).await;
+                    continue;
+                };
+                let event = match next {
                     Ok(DeviceEvent::ObjectAdded { handle }) => Event::Added(handle.0),
                     Ok(DeviceEvent::ObjectRemoved { handle }) => Event::Removed(handle.0),
                     Ok(DeviceEvent::ObjectInfoChanged { handle }) => Event::Changed(handle.0),
@@ -674,6 +713,23 @@ mod tests {
         assert_eq!(
             display_name(None, "", usb_product, "").as_deref(),
             Some("TRINKET-IOT-IDP")
+        );
+    }
+
+    #[test]
+    fn names_macos_usb_errors() {
+        let overrun = mtp_error(
+            Error::Io {
+                message: "unknown (error 0xe00002e8)".into(),
+            },
+            "a.bin",
+        );
+        let message = overrun.to_string();
+        assert!(message.contains("kIOReturnOverrun"), "{message}");
+        assert!(message.contains("another cable"), "{message}");
+        assert_eq!(
+            describe_io("Broken pipe (os error 32)".into()),
+            "Broken pipe (os error 32)"
         );
     }
 
