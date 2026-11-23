@@ -46,7 +46,10 @@ final class DemoNode {
 }
 
 enum DemoLibrary {
-    static let now = Int64(Date().timeIntervalSince1970)
+    /// The demo's "now": file dates and camera file names count back from it. `REMTP_DEMO_NOW` (seconds since
+    /// 1970) pins it, so the documentation screens (design/app-shots.sh) show the same files on every run.
+    static let now = ProcessInfo.processInfo.environment["REMTP_DEMO_NOW"].flatMap { Int64($0) }
+        ?? Int64(Date().timeIntervalSince1970)
 
     static let MB: UInt64 = 1_000_000
     static let GB: UInt64 = 1_000_000_000

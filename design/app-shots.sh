@@ -13,8 +13,12 @@ trap 'rm -rf "$work"' EXIT
 # The Mac pane's folder: sample files and the demo's (sparse) copies go here.
 mkdir -p "$work/Pictures/Lisbon 2026" "$work/shots"
 # Keep other apps out of the front while it runs: a window that loses focus is shot greyed out (reported as FAIL).
-REMTP_SNAPSHOT_SCREENS=1 REMTP_SNAPSHOT_DIR="$work/shots" REMTP_SNAPSHOT_MAC_PATH="$work/Pictures/Lisbon 2026" \
-  "$app/Contents/MacOS/ReMTP"
+# The screens need a 2x display (CI adds a virtual one) and come out the same on every Mac and run: English with
+# British dates and 24-hour times, Zurich time, scroll bars always shown, and the demo's clock pinned to
+# 21 Nov 2026, 22:32 (REMTP_DEMO_NOW, seconds since 1970).
+TZ=Europe/Zurich REMTP_DEMO_NOW=1795296720 \
+  REMTP_SNAPSHOT_SCREENS=1 REMTP_SNAPSHOT_DIR="$work/shots" REMTP_SNAPSHOT_MAC_PATH="$work/Pictures/Lisbon 2026" \
+  "$app/Contents/MacOS/ReMTP" -AppleLanguages '(en)' -AppleLocale en_GB -AppleShowScrollBars Always
 # The canonical set the README and docs use; the run also writes extra screens, which are left out.
 shots=()
 for name in 01-main 03-transfers 05-inspector 06-access; do
