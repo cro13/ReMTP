@@ -101,9 +101,15 @@ struct MainToolbar: CustomizableToolbarContent {
                 .disabled(app.activePane.location == nil || (app.activeKind == .device && !app.devicePaneBrowsable))
                 .help("New Folder (⇧⌘N)")
         }
-        // The app's main action: the only filled button, with how many items it would copy.
+        // The app's main action: the only filled button, with how many items it would copy. The button says the
+        // whole sentence, so its item label (under it in Icon and Text, and in Customize Toolbar) is just "Copy",
+        // the way View's is.
         ToolbarItem(id: "copy", placement: .primaryAction) {
-            CopyToolbarButton(app: app)
+            Label {
+                Text("Copy")
+            } icon: {
+                CopyToolbarButton(app: app)
+            }
         }
         .customizationBehavior(.reorderable)
         if app.showsSync {

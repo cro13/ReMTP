@@ -7,7 +7,12 @@ struct AppCommands: Commands {
     let app: AppModel
 
     var body: some Commands {
-        ToolbarCommands()
+        // Grouped: a commands body takes at most ten entries.
+        Group {
+            CommandGroup(replacing: .appInfo) { AboutMenuButton() }
+            ToolbarCommands()
+            FolderCommands(app: app)
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Folder") { app.newFolder() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -85,6 +90,16 @@ struct AppCommands: Commands {
                 Button("Sync…") { app.openSync() }
             }
             Divider()
+            // The stopped copy the collapsed transfer bar shows.
+            let stopped = stoppedCopy
+            Button(stopped.map { InterruptedCopyStatus($0).actionTitle } ?? "Copy the Remaining") {
+                if let job = stoppedCopy, app.canCopyRemaining(job) { app.copyRemaining(job.id) }
+            }
+            .keyboardShortcut("r", modifiers: [.command, .option])
+            .disabled(stopped.map(app.canCopyRemaining) != true)
+            Button("Show Needs Attention") { app.showTransfers(tab: .attention) }
+                .disabled(app.transfers.attentionCount == 0)
+            Divider()
             Button(app.transfers.allPaused ? "Resume All" : "Pause All") {
                 if app.transfers.allPaused { app.transfers.resumeAll() } else { app.transfers.pauseAll() }
             }
@@ -114,7 +129,15 @@ struct AppCommands: Commands {
             .disabled(app.disconnectedDevices.isEmpty)
         }
         // There is no help book: drop SwiftUI's "ReMTP Help" item (it only says help isn't available).
-        CommandGroup(replacing: .help) {}
+        CommandGroup(replacing: .help) { HelpMenuItems(app: app) }
+    }
+
+    /// The stopped copy Transfer › Copy the Remaining acts on: the first one that can continue, like the
+    /// collapsed transfer bar.
+    @MainActor
+    private var stoppedCopy: QueuedTransfer? {
+        let stopped = app.transfers.stoppedCopies
+        return stopped.first(where: app.canCopyRemaining) ?? stopped.first
     }
 
     /// Runs `action` if a file list has focus; otherwise hands the keystroke's editing command to

@@ -24,6 +24,18 @@ struct ReMTPApp: App {
         }
         .defaultSize(width: 1440, height: 880)
         .commands { AppCommands(app: delegate.app) }
+
+        Window("About ReMTP", id: "about") {
+            AboutView(coreVersion: delegate.app.service.version)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
+        Window("Device Troubleshooting", id: "troubleshooting") {
+            TroubleshootingView(app: delegate.app)
+        }
+        .defaultSize(width: 580, height: 680)
     }
 }
 

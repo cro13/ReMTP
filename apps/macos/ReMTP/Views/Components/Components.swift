@@ -11,12 +11,12 @@ struct BarGauge: View {
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width
+            let widths = Self.segmentWidths(fraction, secondFraction, width: geo.size.width, minimum: height)
             ZStack(alignment: .leading) {
                 Capsule().fill(track)
                 HStack(spacing: 0) {
-                    Rectangle().fill(fill).frame(width: max(0, w * clamp(fraction)))
-                    Rectangle().fill(tint).frame(width: max(0, w * clamp(secondFraction)))
+                    Rectangle().fill(fill).frame(width: widths.first)
+                    Rectangle().fill(tint).frame(width: widths.second)
                 }
                 .clipShape(Capsule())
             }
@@ -24,10 +24,25 @@ struct BarGauge: View {
         .frame(height: height)
         .accessibilityElement()
         // Both segments: the transfer bars draw their progress in the second one.
-        .accessibilityValue("\(Int(clamp(fraction + secondFraction) * 100)) percent")
+        .accessibilityValue("\(Int(Self.clamp(fraction + secondFraction) * 100)) percent")
     }
 
-    private func clamp(_ v: Double) -> Double { min(1, max(0, v.isFinite ? v : 0)) }
+    /// The two segments' widths in a `width`-point track. A segment above zero is at least `minimum` wide
+    /// (the bar's height, so it reads as a dot): 310 KB of 2.4 GB would otherwise draw an empty track. Zero
+    /// stays empty, and the two never overflow the track (the wider one gives way).
+    static func segmentWidths(_ first: Double, _ second: Double, width: CGFloat,
+                              minimum: CGFloat) -> (first: CGFloat, second: CGFloat) {
+        let width = max(0, width)
+        func segment(_ fraction: Double) -> CGFloat {
+            let f = clamp(fraction)
+            return f > 0 ? max(width * f, min(minimum, width)) : 0
+        }
+        let a = segment(first), b = segment(second)
+        let overflow = max(0, a + b - width)
+        return a >= b ? (max(0, a - overflow), b) : (a, max(0, b - overflow))
+    }
+
+    private static func clamp(_ v: Double) -> Double { min(1, max(0, v.isFinite ? v : 0)) }
 }
 
 /// Accent progress bar for transfers.

@@ -54,7 +54,7 @@ struct PaneView: View {
                 }
             } else if let id = app.shownDeviceID {
                 let name = app.displayName(forDevice: id) ?? "The device"
-                let interruption = app.transfers.interruptedCopies.first { $0.deviceID == id }
+                let interruption = app.transfers.interruptedCopies.first { $0.deviceID == id && !$0.stopDismissed }
                 PaneMessage(systemImage: "cable.connector.slash", title: "\(name) isn’t connected",
                             detail: "Connect it with a USB cable, unlock it and choose “File transfer” in its USB notification.") {
                     if let interruption {
@@ -62,7 +62,7 @@ struct PaneView: View {
                             .font(.system(size: 12))
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 360)
-                        Button("Show Transfers") { app.showTransfers(tab: interruption.isActive ? .inProgress : .done) }
+                        Button("Show Transfers") { app.showTransfers(tab: app.transfers.drawerTab(for: interruption)) }
                     }
                 }
             } else {
@@ -169,6 +169,60 @@ struct PaneFooter: View {
     let app: AppModel
 
     var body: some View {
+        Group {
+            if let direction = app.missingStatusDirection(in: pane) {
+                let groups = statusGroups
+                if groups.isEmpty { plainRow(reason: nil) } else { comparedRow(groups, direction: direction) }
+            } else {
+                plainRow(reason: app.comparisonUnavailableReason(in: pane))
+            }
+        }
+        .font(.system(size: 11).monospacedDigit())
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .frame(height: Self.height)
+        .background(Color.paneBar)
+        .overlay(alignment: .top) { Divider() }
+        .contentShape(Rectangle())
+        .onTapGesture { app.activate(pane.kind, focus: true) }
+    }
+
+    /// With a comparison its words come first, in the same phrase as everywhere else. As the pane narrows: the
+    /// free space steps aside (the sidebar shows it too), then the selection's details, then the item count
+    /// (the counts beside it add up to it), then the other device's name shortens to its first word. Marks and
+    /// counts alone (words in the tooltip and VoiceOver) are the last resort.
+    private func comparedRow(_ groups: [StatusGroup], direction: MissingStatusDirection) -> some View {
+        let short = shortOtherName != nil && groups.contains { $0.status.isMissing }
+        func summary(_ style: SummaryStyle) -> some View { statusSummary(groups, direction: direction, style: style) }
+        return ViewThatFits(in: .horizontal) {
+            row(leftText, summary(.full), free: true, tag: "full-1")
+            row(leftText, summary(.full), free: false, tag: "full-2")
+            row(itemCount, summary(.full), free: false, tag: "full-3")
+            row(nil, summary(.full), free: false, tag: "full-4")
+            if short {
+                row(itemCount, summary(.short), free: false, tag: "short-1")
+                row(nil, summary(.short), free: false, tag: "short-2")
+            }
+            row(leftText, summary(.compact), free: true, tag: "compact-1")
+            row(itemCount, summary(.compact), free: true, tag: "compact-2")
+            row(itemCount, summary(.compact), free: false, tag: "compact-3")
+        }
+    }
+
+    private func row(_ left: String?, _ summary: some View, free: Bool, tag: String) -> some View {
+        HStack(spacing: 8) {
+            if let left { Text(left).fixedSize() }
+            Spacer(minLength: 0)
+            summary
+                #if DEBUG
+                .polishFrame("footer.\(pane.kind.rawValue).\(tag)")
+                #endif
+            if free { rightSide.fixedSize() }
+        }
+    }
+
+    /// No comparison: the item count and free space come first; a note on why shortens, then steps aside.
+    private func plainRow(reason: String?) -> some View {
         HStack(spacing: 8) {
             ViewThatFits(in: .horizontal) {
                 Text(leftText).fixedSize()
@@ -176,20 +230,7 @@ struct PaneFooter: View {
             }
             .layoutPriority(2)
             Spacer(minLength: 0)
-            if let direction = app.missingStatusDirection(in: pane) {
-                let groups = statusGroups
-                if !groups.isEmpty {
-                    ViewThatFits(in: .horizontal) {
-                        statusSummary(groups, direction: direction, style: .full)
-                        if pane.kind == .mac, groups.contains(where: { $0.status.isMissing }) {
-                            statusSummary(groups, direction: direction, style: .short)
-                        }
-                        statusSummary(groups, direction: direction, style: .compact)
-                    }
-                    .layoutPriority(1)
-                }
-            } else if let reason = app.comparisonUnavailableReason(in: pane) {
-                // The item count and free space come first; the note shortens, then steps aside.
+            if let reason {
                 ViewThatFits(in: .horizontal) {
                     Text(reason).fixedSize()
                     Text("Not compared").fixedSize()
@@ -202,14 +243,14 @@ struct PaneFooter: View {
             }
             rightSide.fixedSize().layoutPriority(3)
         }
-        .font(.system(size: 11).monospacedDigit())
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 12)
-        .frame(height: Self.height)
-        .background(Color.paneBar)
-        .overlay(alignment: .top) { Divider() }
-        .contentShape(Rectangle())
-        .onTapGesture { app.activate(pane.kind, focus: true) }
+    }
+
+    /// The other side's name cut to its first word ("Galaxy" for Galaxy S23), for the narrow Mac footer;
+    /// nil when that wouldn't be any shorter.
+    private var shortOtherName: String? {
+        let name = app.otherSideName(for: pane)
+        guard let first = name.split(separator: " ").first.map(String.init), first.count < name.count else { return nil }
+        return first
     }
 
     private struct StatusGroup: Identifiable {
@@ -264,11 +305,8 @@ struct PaneFooter: View {
                                 .accessibilityHidden(true)
                             if compact {
                                 Text("\(count)")
-                            } else if style == .short, group.status.isMissing {
-                                Text("\(count) not on")
-                                Text(app.otherSideName(for: pane))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: 44, alignment: .leading)
+                            } else if style == .short, group.status.isMissing, let name = shortOtherName {
+                                Text("\(count) not on \(name)")
                             } else {
                                 Text("\(count) \(group.label)")
                             }

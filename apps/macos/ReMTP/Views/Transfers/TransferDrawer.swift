@@ -43,9 +43,9 @@ struct TransferDrawer: View {
                 .help("Transfers to the same device run one after another. The queue keeps going while you browse."
                     + (app.showsDemoBadge ? " Demo backend: copies are simulated." : ""))
             HStack(spacing: 1) {
-                tab("In Progress", .inProgress, count: transfers.activeJobs.count, transfers)
-                tab("Needs Attention", .attention, count: transfers.issues.count, tint: transfers.issues.isEmpty ? nil : .orange,
-                    transfers)
+                tab("In Progress", .inProgress, count: inProgressJobs(transfers).count, transfers)
+                tab("Needs Attention", .attention, count: transfers.attentionCount,
+                    tint: transfers.attentionCount == 0 ? nil : .orange, transfers)
                 tab("Done Today", .done, count: transfers.doneToday.count, transfers)
             }
             .padding(2)
@@ -105,9 +105,15 @@ struct TransferDrawer: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
+    /// Active jobs, less a stopped copy still winding down: Needs Attention lists that one.
+    private func inProgressJobs(_ transfers: TransferCenter) -> [QueuedTransfer] {
+        let stopped = Set(transfers.stoppedCopies.map(\.id))
+        return transfers.activeJobs.filter { !stopped.contains($0.id) }
+    }
+
     @ViewBuilder
     private func inProgress(_ transfers: TransferCenter) -> some View {
-        let active = transfers.activeJobs
+        let active = inProgressJobs(transfers)
         if active.isEmpty && transfers.issues.isEmpty {
             emptyText("Nothing is being copied. Select files and press \(app.copyShortcut), or drag them to the other pane.")
         }
@@ -120,9 +126,17 @@ struct TransferDrawer: View {
         issueGroups(transfers)
     }
 
+    /// Stopped copies first (the whole copy waits), then conflicts and problems with single files.
     @ViewBuilder
     private func attention(_ transfers: TransferCenter) -> some View {
-        if transfers.issues.isEmpty { emptyText("No conflicts or problems.") }
+        let stopped = transfers.stoppedCopies
+        if transfers.issues.isEmpty && stopped.isEmpty { emptyText("No conflicts or problems.") }
+        if !stopped.isEmpty {
+            groupHeader("Disconnected", detail: "\(Format.count(stopped.count, "copy", "copies")) stopped") {
+                EmptyView()
+            }
+            ForEach(stopped) { job in StoppedCopyRow(app: app, job: job) }
+        }
         issueGroups(transfers)
     }
 
@@ -208,6 +222,11 @@ private struct SpeedSection: View {
     var body: some View {
         let p = job.progress
         let readAheadValue = readAhead(p)
+        // Per-file timings mean something once two files have finished in this run; before that they read 0 ms
+        // (or one big file's whole time), so their rows stay empty, as Read-ahead's does.
+        let perFile = (p?.filesDone ?? 0) >= 2
+        // A run that can't reach two files has no column for them: the graph takes the width from the start.
+        let showsFacts = Self.reservesFacts(job)
         let status = RunningTransferStatus(job: job, issues: issues)
         let speed = p.flatMap { !$0.paused && $0.speedBytesPerSec > 0 ? Format.speed(Double($0.speedBytesPerSec)) : nil }
         HStack(alignment: .center, spacing: 18) {
@@ -237,20 +256,40 @@ private struct SpeedSection: View {
                 SpeedGraph(samples: samples).frame(height: 48)
             }
             .frame(maxWidth: .infinity)
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
-                fact("Average per file", p.map { Format.milliseconds($0.avgMsPerFile) } ?? "—")
-                fact("Device wait per file", p.map { Format.milliseconds($0.deviceWaitMsAvg) } ?? "—")
-                fact("Idle between files", p.map { Format.milliseconds($0.idleMsAvg) } ?? "—")
-                fact("Read-ahead", readAheadValue ?? " ", visible: readAheadValue != nil)
+            #if DEBUG
+            .polishFrame("speedGraph")
+            #endif
+            if showsFacts {
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
+                    fact("Average per file", p.map { Format.milliseconds($0.avgMsPerFile) } ?? " ", visible: perFile)
+                    fact("Device wait per file", p.map { Format.milliseconds($0.deviceWaitMsAvg) } ?? " ", visible: perFile)
+                    fact("Idle between files", p.map { Format.milliseconds($0.idleMsAvg) } ?? " ", visible: perFile)
+                    fact("Read-ahead", readAheadValue ?? " ", visible: readAheadValue != nil)
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .frame(width: 250)
+                #if DEBUG
+                .polishFrame("speedFacts")
+                #endif
             }
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .frame(width: 250)
         }
         .monospacedDigit()
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
+
+    /// Files this run copies: the plan's count once it is scanned; before that the remaining files of a
+    /// continuation, or the top-level sources when none is a folder. Nil when not known yet.
+    static func runFileCount(_ job: QueuedTransfer) -> Int? {
+        if let p = job.progress { return Int(p.filesTotal) }
+        if let total = job.filesTotal { return Int(total) }
+        if let pending = job.spec.pendingSources { return pending.count }
+        return job.sources.values.contains(true) ? nil : job.sources.count
+    }
+
+    /// The per-file column stays (as a stable placeholder until it fills in) unless this run can't reach two files.
+    static func reservesFacts(_ job: QueuedTransfer) -> Bool { (runFileCount(job) ?? 2) >= 2 }
 
     private func fact(_ label: String, _ value: String, visible: Bool = true) -> some View {
         GridRow {
@@ -260,6 +299,7 @@ private struct SpeedSection: View {
             Text(value)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .trailing)
+                .opacity(visible ? 1 : 0)
                 .accessibilityHidden(!visible)
         }
     }
@@ -276,7 +316,8 @@ private struct JobRow: View {
     let transfers: TransferCenter
 
     private var subtitle: String {
-        if job.interruptedByDisconnect { return "Disconnected · \(InterruptedCopyStatus(job).detail)" }
+        // The bytes are under the bar.
+        if job.interruptedByDisconnect { return "Disconnected · \(InterruptedCopyStatus.copiedDetail(job))" }
         guard job.isContinuation else { return job.route }
         let phase = if job.isPaused || (job.state == .queued && transfers.allPaused) {
             "Paused"
@@ -345,6 +386,64 @@ private struct JobRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: 8).fill(job.state == .running ? Color.accentColor.opacity(0.1) : .clear))
+    }
+}
+
+/// A copy a disconnect stopped, in Needs Attention: where it was going, how far it got (the same bar and
+/// counts as the collapsed bar), and Copy the Remaining once the device is back. Dismissing it moves it to
+/// Done Today.
+private struct StoppedCopyRow: View {
+    let app: AppModel
+    let job: QueuedTransfer
+
+    var body: some View {
+        let status = InterruptedCopyStatus(job)
+        HStack(spacing: 12) {
+            JobIcon(job: job, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(job.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(job.route).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(job.route)
+            VStack(alignment: .leading, spacing: 4) {
+                TransferBarGauge(fraction: status.fraction, tint: .orange)
+                Text(status.detail)
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help(status.detail)
+            }
+            .frame(width: 260)
+            HStack(spacing: 6) {
+                if app.canCopyRemaining(job) {
+                    CopyRemainingButton(app: app, job: job).fixedSize()
+                } else {
+                    let hint = status.waitingHint(job, app: app)
+                    Text(hint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(hint)
+                }
+                Button { app.transfers.dismissStop(job.id) } label: {
+                    Image(systemName: "xmark").frame(width: 22, height: 22)
+                }
+                .buttonStyle(.borderless)
+                .help("Dismiss. It stays in Done Today.")
+                .accessibilityLabel("Dismiss the stopped copy of \(job.title)")
+            }
+            .frame(width: 240, alignment: .trailing)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+        .padding(.vertical, 1)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(status.title). \(job.title), \(status.detail)")
     }
 }
 
@@ -676,14 +775,16 @@ private struct DoneRow: View {
     }
 
     private var outcome: String {
-        // Same count as the bar and the device pane: "Disconnected · 1 of 2 files copied".
-        if job.interruptedByDisconnect { return "Disconnected · \(InterruptedCopyStatus(job).detail)" }
+        // Same file count as the bar and the device pane: "Disconnected · 1 of 2 files copied".
+        if job.interruptedByDisconnect { return "Disconnected · \(InterruptedCopyStatus.copiedDetail(job))" }
         guard let s = job.copySummary else { return "" }
         switch job.state {
         case .cancelled: return "Cancelled after \(Format.count(Int(s.filesCopied), "file"))"
         case .failed(let message): return message
         default:
-            var parts = ["\(Format.count(Int(s.filesCopied), "file")) · \(Format.bytes(s.bytes))"]
+            // A row titled with the file's own name doesn't need "1 file".
+            let namedFile = job.sources.count == 1 && job.firstItem?.isDirectory == false && s.filesCopied == 1
+            var parts = [namedFile ? Format.bytes(s.bytes) : "\(Format.count(Int(s.filesCopied), "file")) · \(Format.bytes(s.bytes))"]
             if job.copyParts > 1 {
                 parts.append(job.copyParts == 2 ? "copied in two parts" : "copied in \(job.copyParts.formatted()) parts")
             } else {
@@ -714,13 +815,22 @@ private struct DoneRow: View {
     }
 }
 
-/// The job's first item as a thumbnail/icon.
+/// The job's first item as a thumbnail/icon. Once a copy to the Mac has finished, the thumbnail comes from the
+/// copy on the Mac: Quick Look covers more kinds than the device does (PDFs, documents), it needs no device
+/// request, and it still works after the device is unplugged.
 private struct JobIcon: View {
     let job: QueuedTransfer
     let size: CGFloat
 
+    private var item: FileItem? {
+        guard let item = job.firstItem else { return nil }
+        guard job.state == .finished, job.spec.direction == .fromDevice, !job.isPromise, !item.isDirectory else { return item }
+        let copy = URL(fileURLWithPath: job.spec.destination).appendingPathComponent(item.name)
+        return FileItem(name: item.name, isDirectory: false, size: item.size, modified: item.modified, url: copy)
+    }
+
     var body: some View {
-        if let item = job.firstItem {
+        if let item {
             FileIconView(item: item, size: size)
         } else {
             Image(systemName: "doc.on.doc").font(.system(size: 20)).frame(width: size, height: size)

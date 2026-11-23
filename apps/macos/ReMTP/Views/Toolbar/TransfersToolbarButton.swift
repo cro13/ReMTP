@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Shows or hides the Transfers drawer (⌥⌘T). While anything is copying, the icon's circle is a progress
-/// ring for the running jobs' bytes; an orange dot means something needs attention.
+/// ring for the running jobs' bytes; an orange dot means Needs Attention has something (an issue or a
+/// stopped copy).
 struct TransfersToolbarButton: View {
     let app: AppModel
 
@@ -14,15 +15,15 @@ struct TransfersToolbarButton: View {
         let queued = active.count - running.count - paused
         let fraction = Self.fraction(started)
         let attention = transfers.issues.count
-        let interrupted = transfers.interruptedCopies.count
+        let stopped = transfers.stoppedCopies.count
         let value = Self.status(running: running.count, fraction: fraction, paused: paused, queued: queued,
-                                attention: attention, interrupted: interrupted)
+                                attention: attention, stopped: stopped)
         Toggle(isOn: Binding(get: { transfers.drawerExpanded }, set: { app.showTransfers($0) })) {
             Label {
                 Text("Transfers")
             } icon: {
                 TransfersIcon(fraction: started.isEmpty ? nil : (fraction ?? 0), paused: running.isEmpty,
-                              attention: attention > 0 || interrupted > 0)
+                              attention: transfers.attentionCount > 0)
             }
         }
         .accessibilityLabel("Transfers")
@@ -31,14 +32,14 @@ struct TransfersToolbarButton: View {
     }
 
     private static func status(running: Int, fraction: Double?, paused: Int, queued: Int,
-                               attention: Int, interrupted: Int) -> String {
+                               attention: Int, stopped: Int) -> String {
         var parts: [String] = []
         if running > 0 { parts.append("\(running) running") }
         if paused > 0 { parts.append("\(paused) paused") }
         if let fraction { parts.append("\(Int(fraction * 100)) percent") }
         if queued > 0 { parts.append("\(queued) queued") }
         if attention > 0 { parts.append("\(attention) need\(attention == 1 ? "s" : "") attention") }
-        if interrupted > 0 { parts.append("\(Format.count(interrupted, "copy", "copies")) interrupted") }
+        if stopped > 0 { parts.append("\(Format.count(stopped, "copy", "copies")) stopped") }
         return parts.isEmpty ? "No active transfers" : parts.joined(separator: ", ")
     }
 

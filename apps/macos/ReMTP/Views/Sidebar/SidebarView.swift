@@ -3,6 +3,8 @@ import SwiftUI
 /// Devices (with storages, free space and eject), Mac locations, and sync pairs.
 struct SidebarView: View {
     @Bindable var app: AppModel
+    /// The device row whose area a pinnable folder is being dragged over.
+    @State private var pinTarget: String?
 
     var body: some View {
         List(selection: $app.sidebarSelection) {
@@ -10,12 +12,15 @@ struct SidebarView: View {
                 ForEach(app.devices) { session in
                     DeviceRow(session: session, app: app)
                         .tag(SidebarItem.device(session.id))
+                        .modifier(PinDropArea(app: app, deviceID: session.id, target: $pinTarget, highlights: true))
                     if session.isReady {
                         ForEach(session.storages) { storage in
                             StorageRow(storage: storage)
                                 .tag(SidebarItem.storage(session.id, storage.id))
+                                .modifier(PinDropArea(app: app, deviceID: session.id, target: $pinTarget))
                         }
                     }
+                    favoriteRows(underRow: session.id, name: session.name, available: session.isReady, droppable: true)
                 }
                 ForEach(app.adbOnlyDevices) { device in
                     ADBOnlyDeviceRow(name: app.displayName(forDevice: device.id) ?? device.name)
@@ -24,6 +29,7 @@ struct SidebarView: View {
                             Button("Switch to File Transfer") { app.switchToFileTransfer(device) }
                                 .disabled(app.switchingUSBMode)
                         }
+                    favoriteRows(underRow: device.id, name: app.displayName(forDevice: device.id) ?? device.name, available: false)
                 }
                 ForEach(app.disconnectedDevices) { device in
                     KnownDeviceRow(name: app.displayName(forDevice: device.id) ?? device.name)
@@ -34,6 +40,7 @@ struct SidebarView: View {
                             Divider()
                             Button("Forget This Device") { app.forget(device.id) }
                         }
+                    favoriteRows(underRow: device.id, name: app.displayName(forDevice: device.id) ?? device.name, available: false)
                 }
                 if app.devices.isEmpty && app.adbOnlyDevices.isEmpty && app.disconnectedDevices.isEmpty {
                     Text("No devices").foregroundStyle(.secondary).selectionDisabled()
@@ -79,6 +86,105 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+    }
+
+    /// The folders pinned under a device row, dimmed (like a device that isn't connected) while they can't open.
+    @ViewBuilder
+    private func favoriteRows(underRow id: String, name: String, available: Bool, droppable: Bool = false) -> some View {
+        ForEach(app.sidebarFavorites(underRow: id)) { favorite in
+            FavoriteRow(title: favorite.title, place: app.place(of: favorite, onDevice: id), deviceName: name, available: available)
+                .tag(SidebarItem.favorite(id, favorite.id))
+                .contextMenu {
+                    Button("Remove from Sidebar") { app.removeFavorite(favorite, onDevice: id) }
+                }
+                .modifier(PinDropArea(app: app, deviceID: id, target: $pinTarget, enabled: droppable))
+        }
+    }
+}
+
+/// A pinned device folder, indented under its device like the storage rows.
+private struct FavoriteRow: View {
+    let title: String
+    let place: String
+    let deviceName: String
+    let available: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder")
+                .font(.system(size: 12))
+                .foregroundStyle(available ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .frame(width: 16)
+                .sidebarFrame("favorite-icon:\(title)")
+            Text(title).lineLimit(1).truncationMode(.middle)
+                .sidebarFrame("favorite-title:\(title)")
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(available ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        .padding(.leading, 12)
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .help(place)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), on \(deviceName)")
+        .accessibilityValue(available ? "" : "Not connected")
+        .accessibilityHint(place)
+    }
+}
+
+/// A device's rows take folders dragged from the device pane: dropping one pins it under the device. While a
+/// drag that would pin something is over any of them, the device row highlights.
+private struct PinDropArea: ViewModifier {
+    let app: AppModel
+    let deviceID: String
+    @Binding var target: String?
+    var highlights = false
+    var enabled = true
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .onDrop(of: [DeviceDragItem.contentType],
+                        delegate: SidebarPinDropDelegate(app: app, deviceID: deviceID, target: $target))
+                .background {
+                    if highlights && target == deviceID {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color.accentColor.opacity(0.18))
+                            .padding(.horizontal, -6)
+                    }
+                }
+        } else {
+            content
+        }
+    }
+}
+
+@MainActor
+struct SidebarPinDropDelegate: DropDelegate {
+    let app: AppModel
+    let deviceID: String
+    @Binding var target: String?
+
+    private var pinnable: Bool { !app.foldersToPin(.current(), onDevice: deviceID).isEmpty }
+
+    func validateDrop(info: DropInfo) -> Bool { pinnable }
+
+    func dropEntered(info: DropInfo) {
+        if pinnable { target = deviceID }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: pinnable ? .copy : .forbidden)
+    }
+
+    func dropExited(info: DropInfo) {
+        if target == deviceID { target = nil }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        target = nil
+        defer { app.dragEnded() }
+        return app.pinDropped(.current(), onDevice: deviceID)
     }
 }
 
@@ -193,7 +299,9 @@ private struct StorageRow: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.tint)
                     .frame(width: 16)
+                    .sidebarFrame("storage-icon:\(storage.shortName)")
                 Text(storage.shortName).lineLimit(1).layoutPriority(1)
+                    .sidebarFrame("storage-title:\(storage.shortName)")
                 Spacer(minLength: 4)
                 Text("\(Format.bytes(storage.freeBytes)) free")
                     .font(.system(size: 11))
@@ -224,3 +332,28 @@ private struct KnownDeviceRow: View {
         .padding(.vertical, 2)
     }
 }
+
+extension View {
+    /// DEBUG self-check: records where a sidebar row's icon and title are (`SidebarFrames`). Nothing otherwise.
+    @ViewBuilder
+    func sidebarFrame(_ key: String) -> some View {
+        #if DEBUG
+        if SidebarFrames.enabled {
+            onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { SidebarFrames.frames[key] = $0 }
+                .onDisappear { SidebarFrames.frames.removeValue(forKey: key) }
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}
+
+#if DEBUG
+@MainActor
+enum SidebarFrames {
+    static let enabled = ProcessInfo.processInfo.environment["REMTP_SNAPSHOT_DIR"] != nil
+    static var frames: [String: CGRect] = [:]
+}
+#endif

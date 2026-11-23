@@ -258,6 +258,10 @@ final class PaneContextMenu: NSObject, NSMenuDelegate {
                 key: String(UnicodeScalar(NSBackspaceCharacter)!), modifiers: .command)
             menu.addItem(.separator())
             add(selected.count == 1 ? "Copy Path" : "Copy Paths", #selector(menuCopyPath))
+            if pane.kind == .device, selected.contains(where: \.isBrowsable) {
+                add("Add to Sidebar", #selector(menuAddToSidebar), enabled: app.canAddToSidebar,
+                    key: "t", modifiers: [.command, .control])
+            }
         } else {
             menu.addItem(.separator())
         }
@@ -274,6 +278,7 @@ final class PaneContextMenu: NSObject, NSMenuDelegate {
     @objc private func menuDelete() { app.deleteSelection() }
     @objc private func menuCopyPath() { app.copyPaths() }
     @objc private func menuRefresh() { app.refresh() }
+    @objc private func menuAddToSidebar() { app.addToSidebar() }
 }
 
 // MARK: - Inline rename
