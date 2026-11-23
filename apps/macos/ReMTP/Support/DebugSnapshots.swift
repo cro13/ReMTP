@@ -589,7 +589,17 @@ enum DebugSnapshots {
             print("INFO no composited capture for \(url.lastPathComponent): drawn by the app instead (sidebar icons lose their tint)")
             return write(window, to: url)
         }
-        try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: url)
+        try? NSBitmapImageRep(cgImage: sRGB(image)).representation(using: .png, properties: [:])?.write(to: url)
+    }
+
+    /// The image converted to sRGB, the profile browsers assume. The display's own profile would be embedded
+    /// otherwise, and a virtual display (CI's) gets a new one, dated, every run: new PNG bytes for the same pixels.
+    private static func sRGB(_ image: CGImage) -> CGImage {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return context.makeImage() ?? image
     }
 
     // MARK: Fixture folder
