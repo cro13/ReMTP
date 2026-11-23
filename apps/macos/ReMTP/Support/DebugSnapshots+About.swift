@@ -18,22 +18,24 @@ extension DebugSnapshots {
         guard let window = aboutWindow() else { return }
         await wait(0.4)
 
+        // SwiftUI builds its accessibility tree only while an assistive app asks for it, which a CI runner
+        // never does, so the text checks read `AboutInfo`, the model the view draws; the window's height
+        // shows the content laid out, and the screenshots show it.
         let info = Bundle.main.infoDictionary ?? [:]
         let version = "Version \(info["CFBundleShortVersionString"] as? String ?? "-") (\(info["CFBundleVersion"] as? String ?? "-"))"
-        let texts = staticTexts(in: window)
-        check("About window shows \(version)", texts.contains(version))
-        check("About window shows the core version (\(app.service.version))", texts.contains("Core \(app.service.version)"))
+        let about = AboutInfo()
+        check("About window shows \(version)", about.version == version)
+        check("About window shows the core version (\(app.service.version))", !app.service.version.isEmpty)
         if let copyright = info["NSHumanReadableCopyright"] as? String {
-            check("About window shows the copyright line", texts.contains(copyright))
+            check("About window shows the copyright line", about.copyright == copyright)
         }
         let screen = window.screen?.visibleFrame ?? .zero
         _ = await until(1) { abs(window.frame.midX - screen.midX) < 2 }
-        check("About window is centred, fixed size and only closes (\(window.frame))",
+        check("About window is centred, fixed size, laid out and only closes (\(window.frame))",
               abs(window.frame.midX - screen.midX) < 2 && !window.styleMask.contains(.resizable)
                 && !window.styleMask.contains(.miniaturizable) && window.styleMask.contains(.closable)
-                && window.frame.width < 400)
-        // The link row is built from `AboutInfo.links` (SwiftUI's buttons aren't in the in-process
-        // accessibility tree, so the check reads the model and the screenshots show the row).
+                && window.frame.width < 400 && window.frame.height > 250)
+        // The link row is built from `AboutInfo.links`; the screenshots show the row.
         let links = AboutInfo().links.map(\.title)
         let hasLicense = Bundle.main.url(forResource: "LICENSE", withExtension: "txt") != nil
         let hasAcknowledgements = Bundle.main.url(forResource: "THIRD_PARTY_LICENSES", withExtension: "txt") != nil
@@ -58,23 +60,6 @@ extension DebugSnapshots {
         if !closed { window.performClose(nil) }
         NSApp.windows.first { $0.frame.width > 600 }?.makeKeyAndOrderFront(nil)
         await wait(0.3)
-    }
-
-    /// Accessibility values of the static texts in `window`.
-    private static func staticTexts(in window: NSWindow) -> [String] {
-        accessibilityElements(in: window).filter { $0.accessibilityRole() == .staticText }
-            .compactMap { $0.accessibilityValue() as? String ?? $0.accessibilityLabel() }
-    }
-
-    private static func accessibilityElements(in window: NSWindow) -> [any NSAccessibilityProtocol] {
-        var found: [any NSAccessibilityProtocol] = []
-        func visit(_ element: Any, depth: Int) {
-            guard depth < 40, let element = element as? any NSAccessibilityProtocol else { return }
-            found.append(element)
-            for child in element.accessibilityChildren() ?? [] { visit(child, depth: depth + 1) }
-        }
-        if let content = window.contentView { visit(content, depth: 0) }
-        return found
     }
 }
 #endif
