@@ -36,7 +36,9 @@ struct TransferArea<Content: View>: View {
                         if pane.kind == .mac { return toast.receiver == .mac }
                         return pane.location?.device.map { toast.receiver == .device($0.deviceID) } ?? false
                     }?.kind
-                    let target = (folder ?? receiver).flatMap { bounds[$0] }.map { proxy[$0] }
+                    // Neither pane shows the receiving device (a Mac receiver always matches the Mac pane): the
+                    // device side, never centred on the divider between the panes.
+                    let target = bounds[folder ?? receiver ?? .device].map { proxy[$0] }
                     let area = target ?? CGRect(origin: .zero, size: proxy.size)
                     TransferToast(summary: toast) {
                         app.showTransfers(tab: .done)
@@ -78,8 +80,7 @@ struct TransferArea<Content: View>: View {
     }
 
     private func showsBar(_ transfers: TransferCenter) -> Bool {
-        !transfers.activeJobs.isEmpty || !transfers.issues.isEmpty
-            || transfers.interruptedCopies.contains { !$0.isPromise && $0.remainingFileCount != 0 }
+        !transfers.activeJobs.isEmpty || !transfers.issues.isEmpty || !transfers.stoppedCopies.isEmpty
             || transfers.finishedCopies.contains { $0.hasProblems && reported?.contains($0.id) == false }
     }
 
@@ -92,11 +93,14 @@ struct TransferArea<Content: View>: View {
             return
         }
         if transfers.drawerExpanded {
-            // An issue row may report a file problem, but only Done Today shows the disconnect itself.
+            // An issue row may report a file problem, but only the stopped copy's own row shows the disconnect:
+            // in Needs Attention while it can be continued, else in Done Today.
             let issueJobs = Set(transfers.issues.map(\.jobID))
+            let stopped = Set(transfers.stoppedCopies.map(\.id))
             let shown = finished.filter { job in
-                !job.hasProblems || transfers.drawerTab == .done
-                    || (!job.interruptedByDisconnect && issueJobs.contains(job.id))
+                if !job.hasProblems { return true }
+                if stopped.contains(job.id) { return transfers.drawerTab == .attention }
+                return transfers.drawerTab == .done || (!job.interruptedByDisconnect && issueJobs.contains(job.id))
             }
             reported = seen.union(shown.map(\.id))
             show(nil)
@@ -195,7 +199,9 @@ struct RunningTransferStatus {
 
 struct InterruptedCopyStatus {
     let title: String
+    /// "1 of 2 files · 310 KB of 2.4 GB copied": the files say what's left, the bytes match the bar.
     let detail: String
+    /// By bytes, like the bar once Copy the Remaining starts.
     let fraction: Double
     let actionTitle: String
     let reconnectHint: String
@@ -205,8 +211,8 @@ struct InterruptedCopyStatus {
     init(_ job: QueuedTransfer) {
         let started = job.startedAt != nil || job.isContinuation
         title = "\(started ? "Copy stopped" : "Copy didn’t start"): \(job.deviceName) disconnected"
-        detail = Self.copiedDetail(job)
-        fraction = job.isPromise ? 0 : job.copiedFileFraction
+        detail = Self.copiedDetail(job, bytes: true)
+        fraction = job.isPromise ? 0 : job.fraction
         actionTitle = job.remainingFileCount.map { "Copy the Remaining \($0.formatted())" } ?? "Copy Remaining Files"
         if job.isPromise {
             reconnectHint = "Reconnect to copy again"
@@ -221,12 +227,25 @@ struct InterruptedCopyStatus {
         paneMessage = "\(started ? "A copy stopped" : "A copy didn’t start"). \(detail). \(reconnectHint)."
     }
 
-    static func copiedDetail(_ job: QueuedTransfer) -> String {
+    /// "1 of 2 files copied"; with `bytes`, "1 of 2 files · 310 KB of 2.4 GB copied".
+    static func copiedDetail(_ job: QueuedTransfer, bytes: Bool = false) -> String {
         let copied = job.isPromise ? 0 : job.copyFilesCopied
-        if let total = job.copyFilesTotal, total > 0 {
-            return "\(copied.formatted()) of \(Format.count(Int(total), "file")) copied"
+        guard let total = job.copyFilesTotal, total > 0 else {
+            return copied == 0 ? "No files copied" : "\(Format.count(Int(copied), "file")) copied"
         }
-        return copied == 0 ? "No files copied" : "\(Format.count(Int(copied), "file")) copied"
+        let files = "\(copied.formatted()) of \(Format.count(Int(total), "file"))"
+        guard bytes, !job.isPromise, let bytesTotal = job.copyBytesTotal, bytesTotal > 0 else { return "\(files) copied" }
+        return "\(files) · \(Format.bytesOf(job.copyBytesDone, bytesTotal)) copied"
+    }
+
+    /// What has to happen before Copy the Remaining is offered.
+    @MainActor
+    func waitingHint(_ job: QueuedTransfer, app: AppModel) -> String {
+        let session = app.session(for: job.deviceID)
+        if session?.isReady == true, session?.storage(job.spec.storageID) == nil, job.remainingFileCount != 0 {
+            return "Make the original storage available to continue"
+        }
+        return session == nil ? reconnectHint : accessHint
     }
 }
 
@@ -249,8 +268,9 @@ struct TransferBar: View {
     var body: some View {
         let transfers = app.transfers
         let active = transfers.activeJobs.filter { !$0.interruptedByDisconnect }
+        let stopped = Set(transfers.stoppedCopies.map(\.id))
         let interrupted = transfers.interruptedCopies.filter {
-            !reported.contains($0.id) || (!$0.isPromise && $0.remainingFileCount != 0)
+            stopped.contains($0.id) || (!reported.contains($0.id) && !$0.stopDismissed)
         }
         HStack(spacing: 12) {
             // No job running while some are queued: Pause All is holding the queue (cancelling the running
@@ -341,19 +361,14 @@ struct TransferBar: View {
                 .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        attentionBadge(transfers)
+        attentionBadge(transfers, showing: job.id)
         VStack(spacing: 5) {
             TransferBarGauge(fraction: status.fraction, tint: .orange)
             HStack {
                 if app.canCopyRemaining(job) {
                     CopyRemainingButton(app: app, job: job)
                 } else {
-                    let session = app.session(for: job.deviceID)
-                    let hint = if session?.isReady == true, session?.storage(job.spec.storageID) == nil, job.remainingFileCount != 0 {
-                        "Make the original storage available to continue"
-                    } else {
-                        session == nil ? status.reconnectHint : status.accessHint
-                    }
+                    let hint = status.waitingHint(job, app: app)
                     Text(hint).lineLimit(1).help(hint)
                 }
                 Spacer()
@@ -364,7 +379,7 @@ struct TransferBar: View {
             .foregroundStyle(.secondary)
         }
         .frame(width: 420)
-        expandButton(tab: job.isActive ? .inProgress : .done).buttonStyle(.borderless)
+        expandButton(tab: transfers.drawerTab(for: job)).buttonStyle(.borderless)
     }
 
     @ViewBuilder
@@ -376,7 +391,7 @@ struct TransferBar: View {
         let elapsed = done.reduce(0.0) { $0 + Double($1.copySummary?.elapsedMs ?? 0) / 1_000 }
         let unfinished = done.filter { $0.hasProblems || ($0.copySummary?.filesFailed ?? 0) > 0 || $0.state == .cancelled }
         let fraction = unfinished.isEmpty && transfers.issues.isEmpty
-            ? 1 : min(0.99, unfinished.first?.copiedFileFraction ?? 0)
+            ? 1 : min(0.99, unfinished.first?.fraction ?? 0)
         Image(systemName: errors == 0 ? "checkmark.circle" : "exclamationmark.circle")
             .font(.system(size: 24, weight: .regular))
             .foregroundStyle(errors == 0 ? .green : .orange)
@@ -407,9 +422,10 @@ struct TransferBar: View {
         expandButton().buttonStyle(.borderless)
     }
 
+    /// Needs Attention's count, less the stopped copy the bar itself is showing.
     @ViewBuilder
-    private func attentionBadge(_ transfers: TransferCenter) -> some View {
-        let count = transfers.issues.count
+    private func attentionBadge(_ transfers: TransferCenter, showing shownJob: UUID? = nil) -> some View {
+        let count = transfers.attentionCount - (transfers.stoppedCopies.contains { $0.id == shownJob } ? 1 : 0)
         if count > 0 {
             Button {
                 app.showTransfers(tab: .attention)

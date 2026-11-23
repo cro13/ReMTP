@@ -148,6 +148,8 @@ final class PaneModel {
     @ObservationIgnored private var writesDuringReload: [String: FileItem] = [:]
     @ObservationIgnored let bridge = PaneViewBridge()
     @ObservationIgnored private var watcher: DirectoryWatcher?
+    /// The open folder is a remembered or pinned one: if it turns out to be gone, go up instead of failing.
+    @ObservationIgnored private var fallsBackToParent = false
 
     /// A drag the open folder accepts is over the pane (list, drop bar or path bar): show the drop bar.
     private(set) var dropBarVisible = false
@@ -170,16 +172,20 @@ final class PaneModel {
 
     // MARK: Navigation
 
-    func navigate(to location: PaneLocation, recordHistory: Bool = true, select name: String? = nil) {
-        navigate(to: location, recordHistory: recordHistory, selecting: name.map { [$0] } ?? [])
+    func navigate(to location: PaneLocation, recordHistory: Bool = true, select name: String? = nil,
+                  fallBackToParent: Bool = false) {
+        navigate(to: location, recordHistory: recordHistory, selecting: name.map { [$0] } ?? [], fallBackToParent: fallBackToParent)
     }
 
-    /// Goes to `location` and selects `names` there once it has loaded.
-    func navigate(to location: PaneLocation, recordHistory: Bool = true, selecting names: Set<String>) {
+    /// Goes to `location` and selects `names` there once it has loaded. `fallBackToParent` (a remembered or
+    /// pinned device folder): if the folder is gone, the pane goes up to the nearest folder that exists.
+    func navigate(to location: PaneLocation, recordHistory: Bool = true, selecting names: Set<String>,
+                  fallBackToParent: Bool = false) {
         if let current = self.location, current == location {
             if !names.isEmpty { selectAndReveal(names) }
             return
         }
+        fallsBackToParent = fallBackToParent
         if recordHistory, let current = self.location {
             backStack.append(current)
             if backStack.count > 100 { backStack.removeFirst() }
@@ -187,6 +193,7 @@ final class PaneModel {
         }
         self.location = location
         if let id = location.device?.deviceID, app?.shownDeviceID != id { app?.shownDeviceID = id }
+        if kind == .device, let device = location.device { app?.deviceFolderOpened(device) }
         updateHistoryFlags()
         pendingSelection = names.isEmpty ? nil : names
         selection = []
@@ -339,6 +346,7 @@ final class PaneModel {
         let sortKey = self.sortKey
         let ascending = self.ascending
         let filter = self.filter
+        let fallBack = fallsBackToParent
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -378,6 +386,12 @@ final class PaneModel {
                 }
             } catch {
                 guard token == self.loadToken, self.location == location else { return }
+                if fallBack, case .device(var parent) = location, !DevicePath.isRoot(parent.path),
+                   let failure = error as? DeviceServiceError, failure.isMissingFolder {
+                    parent.path = DevicePath.parent(parent.path)
+                    self.navigate(to: .device(parent), recordHistory: false, fallBackToParent: true)
+                    return
+                }
                 self.isLoading = false
                 self.loadError = error.localizedDescription
                 if !quiet {
@@ -457,6 +471,7 @@ final class PaneModel {
     }
 
     private func apply(_ listed: [FileItem], prebuiltIndex: [String: FileItem]? = nil, preSorted: [FileItem]? = nil) {
+        fallsBackToParent = false
         isLoading = false
         loadError = nil
         hasListing = true
@@ -726,6 +741,16 @@ final class PaneModel {
             return crumbs
         case nil:
             return []
+        }
+    }
+}
+
+extension DeviceServiceError {
+    /// The folder isn't there (deleted, renamed, or a file now has its name).
+    var isMissingFolder: Bool {
+        switch self {
+        case .notFound, .io: return true
+        default: return false
         }
     }
 }

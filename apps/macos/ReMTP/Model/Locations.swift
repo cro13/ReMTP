@@ -153,6 +153,18 @@ enum USBDeviceIdentity {
         guard location.count == 16, location.allSatisfy(\.isHexDigit) else { return nil }
         return "\(parts[0]):\(parts[1])"
     }
+
+    /// What a device's remembered folders and sidebar favourites are kept under: vendor and serial, which stay
+    /// the same when the USB mode (and with it the product id) changes; vendor and product for a device known
+    /// by its USB port (one entry per model, as `KnownDevices.mergePortIDs` keeps); the id itself otherwise.
+    static func folderKey(for id: String) -> String {
+        serialKey(for: id) ?? portModel(for: id).map { "port:\($0)" } ?? id
+    }
+
+    /// Whether two ids are the same device for its folders (`folderKey`).
+    static func sameDevice(_ a: String, _ b: String) -> Bool {
+        a == b || folderKey(for: a) == folderKey(for: b)
+    }
 }
 
 /// Where the app keeps what it learns about devices (known devices, names). Demo runs and the Debug

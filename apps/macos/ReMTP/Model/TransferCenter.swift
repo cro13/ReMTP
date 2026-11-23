@@ -48,6 +48,8 @@ struct QueuedTransfer: Identifiable {
     var continuationID: UUID?
     var copyHistory: CopyHistory?
     var pendingSources: [Data: String]?
+    /// Dismissed from Needs Attention: the stopped copy stays in Done Today and stops asking to be continued.
+    var stopDismissed = false
 
     var isActive: Bool { state == .queued || state == .starting || state == .running }
     var isPaused: Bool { progress?.paused ?? false }
@@ -82,11 +84,6 @@ struct QueuedTransfer: Identifiable {
         return summary
     }
 
-    var copiedFileFraction: Double {
-        guard let total = copyFilesTotal, total > 0 else { return 0 }
-        return min(1, Double(copyFilesCopied) / Double(total))
-    }
-
     var title: String {
         if sources.count == 1, let item = firstItem {
             if item.isDirectory, let files = copyFilesTotal { return "\(item.name) · \(Format.count(Int(files), "file"))" }
@@ -96,6 +93,8 @@ struct QueuedTransfer: Identifiable {
         return Format.count(sources.count, "item")
     }
 
+    /// Bytes of the whole copy, for every bar it has: running, stopped or continued. A stopped copy counts only
+    /// finished files (a partial file is gone), so continuing never moves the bar backwards.
     var fraction: Double {
         guard let total = copyBytesTotal, total > 0 else { return state == .finished ? 1 : 0 }
         return min(1, Double(copyBytesDone) / Double(total))
@@ -191,9 +190,34 @@ final class TransferCenter {
     var queuedCount: Int { jobs.filter { $0.state == .queued }.count }
     var finishedCopies: [QueuedTransfer] { jobs.filter { $0.finishedAt != nil && $0.continuationID == nil } }
 
+    /// Copies finished today, newest first. A stopped copy waits in Needs Attention instead, until it's
+    /// continued (then its final run is here) or dismissed.
     var doneToday: [QueuedTransfer] {
         let calendar = Calendar.current
-        return finishedCopies.filter { $0.finishedAt.map(calendar.isDateInToday) == true }.reversed()
+        let stopped = Set(stoppedCopies.map(\.id))
+        return finishedCopies.filter { $0.finishedAt.map(calendar.isDateInToday) == true && !stopped.contains($0.id) }
+            .reversed()
+    }
+
+    /// Copies a disconnect stopped that Copy the Remaining can still finish (not Finder drags, which have
+    /// to be dragged again). They are in Needs Attention and give the Transfers button its orange dot.
+    var stoppedCopies: [QueuedTransfer] {
+        interruptedCopies.filter { !$0.isPromise && $0.remainingFileCount != 0 && !$0.stopDismissed }
+    }
+
+    /// Needs Attention's badge: issues plus stopped copies.
+    var attentionCount: Int { issues.count + stoppedCopies.count }
+
+    /// The tab that lists `job`.
+    func drawerTab(for job: QueuedTransfer) -> DrawerTab {
+        if stoppedCopies.contains(where: { $0.id == job.id }) { return .attention }
+        return job.isActive ? .inProgress : .done
+    }
+
+    /// Lets a stopped copy go: it leaves Needs Attention for Done Today.
+    func dismissStop(_ id: UUID) {
+        guard let i = index(id) else { return }
+        jobs[i].stopDismissed = true
     }
 
     var interruptedCopies: [QueuedTransfer] {
@@ -209,15 +233,17 @@ final class TransferCenter {
 
     func job(_ id: UUID) -> QueuedTransfer? { jobs.first { $0.id == id } }
 
+    /// The tab that has something in it: In Progress while anything runs, then Needs Attention, then Done Today.
+    var defaultDrawerTab: DrawerTab? {
+        let stopped = Set(stoppedCopies.map(\.id))
+        if activeJobs.contains(where: { !stopped.contains($0.id) }) { return .inProgress }
+        if attentionCount > 0 { return .attention }
+        return doneToday.isEmpty ? nil : .done
+    }
+
     /// Opens the drawer on the tab that has something in it.
     func showDrawer() {
-        if !activeJobs.isEmpty {
-            drawerTab = .inProgress
-        } else if !issues.isEmpty {
-            drawerTab = .attention
-        } else if !doneToday.isEmpty {
-            drawerTab = .done
-        }
+        if let tab = defaultDrawerTab { drawerTab = tab }
         drawerExpanded = true
     }
 
@@ -393,8 +419,10 @@ final class TransferCenter {
         jobs.insert(job, at: firstQueued)
     }
 
+    /// Done Today's Clear. Stopped copies aren't listed there, so they stay.
     func clearFinished() {
-        jobs.removeAll { !$0.isActive }
+        let stopped = Set(stoppedCopies.map(\.id))
+        jobs.removeAll { !$0.isActive && !stopped.contains($0.id) }
     }
 
     /// Answers a conflict, or changes an answer that is still queued. Other kinds can't be answered (the core

@@ -336,6 +336,13 @@ enum DebugSnapshots {
 
             await lifecycleChecks(app: app, macPath: macPath, shot: shot)
 
+            // Checks kept in their own files (DebugSnapshots+*.swift). Each sets up the devices and panes it
+            // needs and puts back what it changes.
+            await folderChecks(app: app, macPath: macPath, shot: shot)
+            await menuChecks(app: app, macPath: macPath, shot: shot)
+            await aboutChecks(app: app, shot: shot)
+            await polishChecks(app: app, macPath: macPath, shot: shot)
+
             app.transfers.cancelAll()
             await wait(0.5)
             prefsCheck(app: app, before: standardBefore)
@@ -345,9 +352,9 @@ enum DebugSnapshots {
         }
     }
 
-    private static func wait(_ seconds: Double) async { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)) }
+    static func wait(_ seconds: Double) async { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)) }
 
-    private static func captureAppearances(_ name: String, shot: (String) -> Void) async {
+    static func captureAppearances(_ name: String, shot: (String) -> Void) async {
         shot(name)
         let previous = NSApp.appearance
         defer { NSApp.appearance = previous }
@@ -358,7 +365,7 @@ enum DebugSnapshots {
         }
     }
 
-    private static func check(_ name: String, _ ok: Bool) {
+    static func check(_ name: String, _ ok: Bool) {
         if !ok { failures += 1 }
         print("\(ok ? "PASS" : "FAIL") \(name)")
         fflush(stdout)
@@ -396,7 +403,7 @@ enum DebugSnapshots {
         case pane(PaneKind), wordFooter(PaneKind), toast
     }
 
-    fileprivate static var layoutFrames: [LayoutElement: CGRect] = [:]
+    static var layoutFrames: [LayoutElement: CGRect] = [:]
 
     private static func toastFits(in kind: PaneKind) -> Bool {
         guard let pane = layoutFrames[.pane(kind)], let toast = layoutFrames[.toast] else { return false }
@@ -424,20 +431,21 @@ enum DebugSnapshots {
                 await wait(0.5)
                 let visible = toolbar.visibleItems ?? []
                 let labels = visible.map(\.label)
-                let required = ["Back", "Forward", "View", "Swap Panes", "New Folder", "Transfers", "Inspector", "Filter"]
+                // The Copy button already says the whole sentence, so its label is just "Copy".
+                let required = ["Back", "Forward", "View", "Swap Panes", "New Folder", "Copy", "Transfers", "Inspector", "Filter"]
                     + (app.showsSync ? ["Sync"] : [])
                 // AppKit turns Text Only back into Icon and Text for this toolbar (macOS 15); either way every
                 // label has to be on screen.
                 let settled = toolbar.displayMode == mode || (mode == .labelOnly && toolbar.displayMode == .iconAndLabel)
                 check("Toolbar \(name), inspector \(inspector), mode \(toolbar.displayMode.rawValue): all labels visible (\(labels))",
-                      settled && required.allSatisfy(labels.contains) && labels.contains { $0.hasPrefix("Copy") })
+                      settled && required.allSatisfy(labels.contains) && !labels.contains { $0.hasPrefix("Copy ") })
                 shot("01-toolbar-\(name)\(inspector ? "-inspector" : "")")
             }
         }
     }
 
     /// Waits up to `seconds` for `condition`.
-    private static func until(_ seconds: Double, _ condition: () -> Bool) async -> Bool {
+    static func until(_ seconds: Double, _ condition: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(seconds)
         while !condition() {
             if Date() > deadline { return false }
@@ -635,7 +643,7 @@ enum DebugSnapshots {
         let domain = UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "") ?? [:]
         var keys: [String: Data] = [:]
         for key in [KnownDevices.key, KnownDevices.namesKey, AppModel.viewModeKey(.mac), AppModel.viewModeKey(.device),
-                    AppModel.chargingOnEjectKey] {
+                    AppModel.chargingOnEjectKey, DeviceFolders.lastKey, DeviceFolders.favoritesKey] {
             if let value = domain[key] {
                 keys[key] = (value as? Data) ?? (try? PropertyListSerialization.data(fromPropertyList: value, format: .binary, options: 0))
             }
@@ -1565,11 +1573,19 @@ enum DebugSnapshots {
                   && !app.devicePaneBrowsable && app.windowSubtitle == "Not connected")
             let interruption = app.transfers.interruptedCopies.first { $0.id == jobID }
             let status = interruption.map(InterruptedCopyStatus.init)
-            check("Interrupted copy counts the published file and shows half progress",
+            let copyBytes = ticketBytes + backupBytes
+            let stoppedDetail = "1 of 2 files · \(Format.bytesOf(ticketBytes, copyBytes)) copied"
+            check("Interrupted copy counts the published file, by files and by bytes (\(status?.detail ?? "none"))",
                   fm.fileExists(atPath: (macPath as NSString).appendingPathComponent(ticket))
-                  && status?.detail == "1 of 2 files copied" && status?.fraction == 0.5
+                  && status?.detail == stoppedDetail && status?.fraction == Double(ticketBytes) / Double(copyBytes)
                   && interruption?.remainingFileCount == 1 && status?.reconnectHint == "Reconnect to copy the remaining 1"
                   && interruption.map(app.canCopyRemaining) == false)
+            let opensOnAttention = app.transfers.defaultDrawerTab == .attention
+            check("A stopped copy waits in Needs Attention, not Done Today, and the drawer opens there",
+                  app.transfers.stoppedCopies.map(\.id) == [jobID].compactMap { $0 }
+                  && app.transfers.attentionCount == app.transfers.issues.count + 1
+                  && !app.transfers.doneToday.contains { $0.copyID == jobID }
+                  && interruption.map { app.transfers.drawerTab(for: $0) } == .attention && opensOnAttention)
             await captureAppearances("09-unplugged-mid-transfer", shot: shot)
             let jobsBeforeReconnect = app.transfers.jobs.count
             demo.setPlugged(deviceID: galaxy, true)
@@ -1578,10 +1594,11 @@ enum DebugSnapshots {
                   readyAgain && job()?.state == state && app.transfers.jobs.count == jobsBeforeReconnect
                   && job().map(app.canCopyRemaining) == true)
             await captureAppearances("09-reconnected-copy-remaining", shot: shot)
-            app.showTransfers(tab: .done)
+            app.showTransfers()
             await wait(0.25)
-            await captureAppearances("09-done-copy-remaining", shot: shot)
+            await captureAppearances("09-attention-copy-remaining", shot: shot)
             app.showTransfers(false)
+            let stoppedFraction = job()?.fraction ?? 1
             let resumedID = jobID.flatMap(app.copyRemaining)
             func resumed() -> QueuedTransfer? { resumedID.flatMap(app.transfers.job) }
             let pending = [backupPath]
@@ -1594,7 +1611,10 @@ enum DebugSnapshots {
                   && activeCopy.first?.copyFilesTotal == 2 && activeCopy.first?.copyBytesTotal == ticketBytes + backupBytes
                   && (activeCopy.first?.copyBytesDone ?? 0) > ticketBytes
                   && runningStatus?.title == "Continuing · 1 of 2 files copied"
-                  && !app.transfers.doneToday.contains { $0.copyID == jobID })
+                  && !app.transfers.doneToday.contains { $0.copyID == jobID }
+                  && !app.transfers.stoppedCopies.contains { $0.copyID == jobID })
+            check("Continuing doesn't move the bar backwards (\(stoppedFraction) → \(activeCopy.first?.fraction ?? -1))",
+                  (activeCopy.first?.fraction ?? -1) >= stoppedFraction)
             check("The collapsed bar has an estimate while copying, not while paused", runningStatus?.timeLeft != nil
                   && resumed().map { job in
                       var paused = job
@@ -1611,9 +1631,11 @@ enum DebugSnapshots {
             let readyOnceMore = await until(3) { app.session(for: galaxy)?.isReady == true }
             check("A second interruption keeps one row with the original total and offers Copy the Remaining again",
                   stoppedAgain && readyOnceMore && secondInterruption.map(\.id) == [resumedID].compactMap { $0 }
-                  && secondStatus?.detail == "1 of 2 files copied" && secondStatus?.actionTitle == "Copy the Remaining 1"
+                  && secondStatus?.detail == stoppedDetail && secondStatus?.actionTitle == "Copy the Remaining 1"
+                  && secondStatus?.fraction == stoppedFraction
                   && resumed()?.copyBytesDone == ticketBytes && resumed()?.spec.pendingSources == pending
-                  && app.transfers.doneToday.filter { $0.copyID == jobID }.count == 1
+                  && app.transfers.stoppedCopies.filter { $0.copyID == jobID }.count == 1
+                  && !app.transfers.doneToday.contains { $0.copyID == jobID }
                   && secondInterruption.first.map(app.canCopyRemaining) == true)
             let finalID = resumedID.flatMap(app.copyRemaining)
             func finalRun() -> QueuedTransfer? { finalID.flatMap(app.transfers.job) }

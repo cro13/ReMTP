@@ -17,6 +17,8 @@ enum SidebarItem: Hashable {
     case mac(URL)
     case syncPair(String)
     case known(String)
+    /// A pinned device folder: the id of the device row it is under, and the favourite's id.
+    case favorite(String, String)
 }
 
 private struct USBModeChange {
@@ -38,6 +40,11 @@ final class AppModel {
     let transfers = TransferCenter()
     /// Known devices and device names. Demo runs keep theirs in `AppDefaults.demoSuiteName`.
     @ObservationIgnored let known: KnownDevices
+    /// Each device's last folders and its folders pinned in the sidebar (same defaults store as `known`).
+    @ObservationIgnored let folders: DeviceFolders
+    /// A favourite clicked while its device couldn't show it (not connected, held, charging only): the device
+    /// pane opens it once that device is ready. The id is the device row's.
+    private(set) var pendingFavorite: (rowID: String, favorite: DeviceFavorite)?
     /// Where app settings go (view modes): `AppDefaults.demoSuiteName` in demo runs, the standard domain otherwise.
     @ObservationIgnored let defaults: UserDefaults
 
@@ -96,6 +103,10 @@ final class AppModel {
         #endif
         defaults = AppDefaults.store(demo: demo)
         known = KnownDevices(defaults: defaults)
+        folders = DeviceFolders(defaults: defaults)
+        #if DEBUG
+        DeviceFolders.standardAtLaunch = DeviceFolders.standardSnapshot()
+        #endif
         chargingOnEject = Set(defaults.stringArray(forKey: Self.chargingOnEjectKey) ?? [])
         if demo { known.migrateDemoID(from: DemoDeviceService.legacyGalaxyID, to: DemoDeviceService.galaxyID) }
         // Older demo runs and self-checks wrote their simulated devices into the real app's defaults.
@@ -412,12 +423,16 @@ final class AppModel {
 
     private func deviceBecameReady(_ session: DeviceSession) {
         if shouldShowConnectedDevice { shownDeviceID = session.id }
+        folders.updateStorageNames(of: session.id, Dictionary(session.storages.map { ($0.id, $0.shortName) },
+                                                              uniquingKeysWith: { a, _ in a }))
         guard shownDeviceID == session.id else { return }
-        if let loc = devicePane.location?.device, loc.deviceID == session.id, session.storage(loc.storageID) != nil {
+        if let pending = takePendingFavorite(for: session) {
+            devicePane.navigate(to: .device(pending), recordHistory: false, fallBackToParent: true)
+        } else if let loc = devicePane.location?.device, loc.deviceID == session.id, session.storage(loc.storageID) != nil {
+            // Plugged back in (or reconnected): the pane stays where it was.
             devicePane.reload()
-        } else if let storage = session.storages.first {
-            devicePane.navigate(to: .device(DeviceLocation(deviceID: session.id, storageID: storage.id, path: "/")),
-                                recordHistory: false)
+        } else {
+            openRememberedFolder(of: session, recordHistory: false)
         }
     }
 
@@ -647,6 +662,12 @@ final class AppModel {
 
     func forget(_ id: String) {
         known.forget(id)
+        // Its folders go too, unless the same device is still here under another id (USB mode).
+        let present = devices.map(\.id) + adbOnlyDevices.map(\.id) + Array(known.all.keys)
+        if !present.contains(where: { USBDeviceIdentity.sameDevice($0, id) }) {
+            folders.forget(id)
+            if let pending = pendingFavorite, USBDeviceIdentity.sameDevice(pending.rowID, id) { pendingFavorite = nil }
+        }
         session(for: id)?.customName = nil
         // The device pane was showing it as not connected: show another device, or none.
         if shownDeviceID == id, session(for: id) == nil {
@@ -721,8 +742,10 @@ final class AppModel {
             switch activeKind {
             case .device:
                 if let loc = devicePane.location?.device, loc.deviceID == shownDeviceID, shownSession?.isReady == true {
+                    if let favorite = folders.favorite(at: loc) { return .favorite(loc.deviceID, favorite.id) }
                     return .storage(loc.deviceID, loc.storageID)
                 }
+                if let pending = pendingFavorite, pending.rowID == shownDeviceID { return .favorite(pending.rowID, pending.favorite.id) }
                 if let device = shownADBOnlyDevice { return .adbOnly(device.id) }
                 return shownDeviceID.map(SidebarItem.device)
             case .mac:
@@ -736,27 +759,40 @@ final class AppModel {
             case .device(let device)?, .adbOnly(let device)?: showDevice(device)
             case .mac(let url)?: showMacFolder(url)
             case .syncPair(let id)?: if showsSync { syncPreview = SyncPreviewDemo.pair(id) }
+            case .favorite(let device, let favorite)?:
+                if let favorite = folders.favorites(of: device).first(where: { $0.id == favorite }) {
+                    openFavorite(favorite, onDevice: device)
+                }
             case .known, nil: break
             }
         }
     }
 
+    /// A storage row: the device pane opens that storage's last folder (its root the first time). Already on
+    /// that storage, it stays where it is.
     func showStorage(deviceID: String, storageID: UInt32) {
+        pendingFavorite = nil
         shownDeviceID = deviceID
-        if session(for: deviceID)?.isReady == true {
+        if let session = session(for: deviceID), session.isReady {
             let current = devicePane.location?.device
             if current?.deviceID != deviceID || current?.storageID != storageID {
-                devicePane.navigate(to: .device(DeviceLocation(deviceID: deviceID, storageID: storageID, path: "/")))
+                openRememberedFolder(of: session, storageID: storageID)
             }
         }
         activate(.device, focus: true)
     }
 
+    /// A device row (or the device connecting, or a USB mode switch): the device pane opens the device's last
+    /// folder. Already showing that device, it stays where it is.
     func showDevice(_ id: String) {
+        if let pending = pendingFavorite, !USBDeviceIdentity.sameDevice(pending.rowID, id) { pendingFavorite = nil }
         shownDeviceID = id
-        if let session = session(for: id), session.isReady, devicePane.location?.device?.deviceID != id,
-           let storage = session.storages.first {
-            devicePane.navigate(to: .device(DeviceLocation(deviceID: id, storageID: storage.id, path: "/")))
+        if let session = session(for: id), session.isReady {
+            if let pending = takePendingFavorite(for: session) {
+                devicePane.navigate(to: .device(pending), fallBackToParent: true)
+            } else if devicePane.location?.device?.deviceID != id {
+                openRememberedFolder(of: session)
+            }
         }
         activate(.device, focus: shownADBOnlyDevice == nil)
     }
@@ -770,6 +806,126 @@ final class AppModel {
     var devicePaneBrowsable: Bool {
         guard let session = shownSession, session.isReady, let loc = devicePane.location?.device else { return false }
         return loc.deviceID == session.id
+    }
+
+    // MARK: Device folders
+
+    /// Where the device pane opens `session`: the folder it last showed on `storageID` (by default the storage
+    /// it showed last, else the first), or that storage's root.
+    func rememberedLocation(of session: DeviceSession, storageID: UInt32? = nil) -> DeviceLocation? {
+        let storage = storageID.flatMap(session.storage)
+            ?? folders.lastStorage(of: session.id).flatMap(session.storage) ?? session.storages.first
+        guard let storage else { return nil }
+        return DeviceLocation(deviceID: session.id, storageID: storage.id,
+                              path: folders.lastPath(of: session.id, storageID: storage.id) ?? DevicePath.root)
+    }
+
+    /// Opens the remembered folder; if it is gone, the nearest folder above it that still exists.
+    private func openRememberedFolder(of session: DeviceSession, storageID: UInt32? = nil, recordHistory: Bool = true) {
+        guard let location = rememberedLocation(of: session, storageID: storageID) else { return }
+        devicePane.navigate(to: .device(location), recordHistory: recordHistory, fallBackToParent: true)
+    }
+
+    /// The device pane opened `location` (`PaneModel.navigate`): it opens there next time.
+    func deviceFolderOpened(_ location: DeviceLocation) {
+        guard let session = session(for: location.deviceID), session.storage(location.storageID) != nil else { return }
+        folders.remember(location)
+    }
+
+    private func takePendingFavorite(for session: DeviceSession) -> DeviceLocation? {
+        guard let pending = pendingFavorite, USBDeviceIdentity.sameDevice(pending.rowID, session.id),
+              session.storage(pending.favorite.storageID) != nil else { return nil }
+        pendingFavorite = nil
+        return DeviceLocation(deviceID: session.id, storageID: pending.favorite.storageID, path: pending.favorite.path)
+    }
+
+    /// The device rows in sidebar order: connected, charging only, not connected.
+    private var sidebarDeviceRowIDs: [String] {
+        devices.map(\.id) + adbOnlyDevices.map(\.id) + disconnectedDevices.map(\.id)
+    }
+
+    /// The favourites shown under the device row `id`. A device listed twice (two USB modes) shows them once,
+    /// under its first row.
+    func sidebarFavorites(underRow id: String) -> [DeviceFavorite] {
+        let favorites = folders.favorites(of: id)
+        guard !favorites.isEmpty, sidebarDeviceRowIDs.first(where: { USBDeviceIdentity.sameDevice($0, id) }) == id else { return [] }
+        return favorites
+    }
+
+    /// The favourite's place, for its tooltip: "Internal › DCIM › Camera".
+    func place(of favorite: DeviceFavorite, onDevice id: String) -> String {
+        favorite.place(storageName: session(for: id)?.storage(favorite.storageID)?.shortName)
+    }
+
+    /// A favourite in the sidebar. With its device ready, the device pane opens the folder (or the nearest one
+    /// above it if it is gone); otherwise the pane shows the device as it is (not connected, held, charging
+    /// only) and opens the folder once the device is ready.
+    func openFavorite(_ favorite: DeviceFavorite, onDevice id: String) {
+        guard let session = session(for: id), session.isReady, session.storage(favorite.storageID) != nil else {
+            pendingFavorite = (id, favorite)
+            showDevice(id)
+            return
+        }
+        pendingFavorite = nil
+        shownDeviceID = id
+        devicePane.navigate(to: .device(DeviceLocation(deviceID: id, storageID: favorite.storageID, path: favorite.path)),
+                            fallBackToParent: true)
+        activate(.device, focus: true)
+    }
+
+    /// The device folders "Add to Sidebar" acts on: the device pane's selected folders, or its open folder when
+    /// nothing is selected. Never a storage root (that is the storage row).
+    var sidebarFolderTargets: [DeviceLocation] {
+        guard activeKind == .device, devicePaneBrowsable, let open = devicePane.location?.device else { return [] }
+        let items = devicePane.targetItems
+        let locations = items.isEmpty ? [open] : items.filter(\.isBrowsable).compactMap { devicePane.location(of: $0)?.device }
+        return locations.filter { !DevicePath.isRoot($0.path) }
+    }
+
+    var canAddToSidebar: Bool { sidebarFolderTargets.contains { !folders.isPinned($0) } }
+    var canRemoveFromSidebar: Bool { sidebarFolderTargets.contains(where: folders.isPinned) }
+
+    /// File › Add to Sidebar and the device pane's context menu.
+    func addToSidebar() {
+        if pin(sidebarFolderTargets) == 0 { NSSound.beep() }
+    }
+
+    /// File › Remove from Sidebar.
+    func removeFromSidebar() {
+        let pinned = sidebarFolderTargets.compactMap(folders.favorite(at:))
+        guard let id = devicePane.location?.device?.deviceID, !pinned.isEmpty else { return NSSound.beep() }
+        for favorite in pinned { folders.unpin(favorite.id, of: id) }
+    }
+
+    /// A favourite row's "Remove from Sidebar".
+    func removeFavorite(_ favorite: DeviceFavorite, onDevice id: String) {
+        folders.unpin(favorite.id, of: id)
+        if let pending = pendingFavorite, pending.favorite.id == favorite.id, USBDeviceIdentity.sameDevice(pending.rowID, id) {
+            pendingFavorite = nil
+        }
+    }
+
+    /// Pins device folders under their device; returns how many were new.
+    @discardableResult
+    func pin(_ locations: [DeviceLocation]) -> Int {
+        locations.reduce(0) { added, location in
+            let name = session(for: location.deviceID)?.storage(location.storageID)?.shortName ?? "Storage"
+            return added + (folders.pin(location, storageName: name) ? 1 : 0)
+        }
+    }
+
+    /// The folders of a drag from the device pane that dropping it on the device row `id` (or a row under it)
+    /// would pin: folders of that device, not pinned yet.
+    func foldersToPin(_ drag: DragPayload, onDevice id: String) -> [DeviceLocation] {
+        drag.deviceItems.filter { $0.isDir && USBDeviceIdentity.sameDevice($0.deviceID, id) }
+            .map { DeviceLocation(deviceID: $0.deviceID, storageID: $0.storageID, path: $0.path) }
+            .filter { !DevicePath.isRoot($0.path) && !folders.isPinned($0) && session(for: $0.deviceID)?.isReady == true }
+    }
+
+    /// Device folders dropped on their device in the sidebar.
+    @discardableResult
+    func pinDropped(_ drag: DragPayload, onDevice id: String) -> Bool {
+        pin(foldersToPin(drag, onDevice: id)) > 0
     }
 
     // MARK: Compare
@@ -1026,7 +1182,9 @@ final class AppModel {
             Task {
                 do {
                     try await offMain { try connection.rename(storageID: loc.storageID, path: path, newName: newName) }
-                    done(DevicePath.join(DevicePath.parent(path), newName))
+                    let renamed = DevicePath.join(DevicePath.parent(path), newName)
+                    if item.isBrowsable { self.folders.moved(loc.deviceID, storageID: loc.storageID, from: path, to: renamed) }
+                    done(renamed)
                 } catch {
                     self.showError("Couldn’t rename “\(item.name)”.", error)
                 }
@@ -1071,6 +1229,9 @@ final class AppModel {
                 guard response == .alertFirstButtonReturn else { return }
                 Task {
                     let outcome = await self.deleteOnDevice(targets, connection: connection)
+                    let deleted = Set(outcome.deleted)
+                    self.folders.removed(loc.deviceID, storageID: loc.storageID,
+                                         paths: targets.filter { $0.isDir && deleted.contains($0.name) }.map(\.path))
                     if let message = outcome.report { self.showMessage(message.title, detail: message.detail) }
                     if parent != nil, outcome.deleted.isEmpty { pane.reload(quiet: true) } else { done() }
                     self.refreshDetails(session)
@@ -1109,9 +1270,11 @@ final class AppModel {
 
     // MARK: Copying
 
-    /// Where the active pane's selection would be copied: the device's name, or "Mac".
+    /// Where the active pane's selection would be copied: the device's name (also while it's unplugged, as the
+    /// device pane still names it), or "Mac".
     var copyTargetName: String {
-        activeKind == .mac ? (shownSession?.name ?? "Device") : "Mac"
+        guard activeKind == .mac else { return "Mac" }
+        return shownSession?.name ?? shownDeviceID.flatMap(displayName(forDevice:)) ?? "Device"
     }
 
     /// An arrow pointing at the pane the files go to.
