@@ -71,7 +71,18 @@ final class DemoTransfer: TransferControl, @unchecked Sendable {
 
     // MARK: Run
 
-    private var now: TimeInterval { Date().timeIntervalSinceReferenceDate }
+    /// For the documentation screens: when set, copies run on simulated time (no sleeping, so speeds and the
+    /// graph don't depend on how busy the Mac is) and hold, still running, once this many bytes have moved,
+    /// until cancelled. Read when a copy is created.
+    nonisolated(unsafe) static var screenshotHold: UInt64?
+    private let hold = DemoTransfer.screenshotHold
+    private var simulatedTime: TimeInterval = 0
+
+    private var now: TimeInterval { hold == nil ? Date().timeIntervalSinceReferenceDate : simulatedTime }
+
+    private func pass(_ seconds: TimeInterval) {
+        if hold == nil { Thread.sleep(forTimeInterval: seconds) } else { simulatedTime += seconds }
+    }
 
     private var isCancelled: Bool { cond.lock(); defer { cond.unlock() }; return cancelled }
 
@@ -360,7 +371,7 @@ final class DemoTransfer: TransferControl, @unchecked Sendable {
         guard let device else { return false }
         // Idle between files: the next file is already read ahead, so this stays tiny.
         let idle = 0.002 + Double(DemoLibrary.hash(file.source) % 30) / 10_000
-        Thread.sleep(forTimeInterval: idle)
+        pass(idle)
         idleMs.append(idle * 1_000)
 
         let fileStart = now
@@ -374,14 +385,19 @@ final class DemoTransfer: TransferControl, @unchecked Sendable {
             let wobble = 1 + 0.025 * sin(t * 1.7) + 0.02 * sin(t * 0.43) + 0.01 * cos(t * 2.9)
             let rate = device.bytesPerSecond * wobble * (job.direction == .fromDevice ? 1.08 : 1)
             let chunk = min(file.size - currentDone, UInt64(rate * 0.05))
-            Thread.sleep(forTimeInterval: Double(chunk) / rate)
+            pass(Double(chunk) / rate)
             currentDone += chunk
             bytesDone += chunk
             emit(force: false)
+            if let hold, bytesDone >= hold {
+                emit(force: true)
+                while !isCancelled { Thread.sleep(forTimeInterval: 0.1) }
+                return false
+            }
         }
         // Device wait: last chunk handed over → the device answers (media scan on Android).
         let wait = (job.direction == .toDevice ? device.deviceWaitMs : 6) * (0.85 + Double(DemoLibrary.hash(name) % 30) / 100)
-        Thread.sleep(forTimeInterval: wait / 1_000)
+        pass(wait / 1_000)
         waitMs.append(wait)
 
         do {

@@ -20,7 +20,15 @@ enum LocalFileSystem {
                         created: values?.creationDate, url: url, isHidden: values?.isHidden ?? false)
     }
 
+    #if DEBUG
+    /// Shown instead of the Mac's real free space by the documentation screens, where it would differ per run.
+    nonisolated(unsafe) static var pinnedAvailableCapacity: Int64?
+    #endif
+
     static func availableCapacity(_ url: URL) -> Int64? {
+        #if DEBUG
+        if let pinnedAvailableCapacity { return pinnedAvailableCapacity }
+        #endif
         let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey])
         if let important = values?.volumeAvailableCapacityForImportantUsage, important > 0 { return important }
         return values?.volumeAvailableCapacity.map(Int64.init)
