@@ -55,8 +55,9 @@ The app talks to the Rust core only through `remtp-ffi`. If you change that API,
 - CI must pass: Rust formatting, clippy with warnings as errors and tests on macOS (arm64) and Windows
   (the core stays cross-platform); the macOS app build for arm64 and Intel; and the app's self-check on
   arm64, which fails on any `FAIL` line.
-- Keep UI changes consistent with the existing screens in `design/` and attach a screenshot. The manual
-  "Screenshots" workflow in GitHub Actions builds the app and uploads fresh screenshots as an artifact.
+- Keep UI changes consistent with the existing screens in `design/` and attach a screenshot. Leave
+  `design/screenshots/` alone: after a change to the app lands on main, the "Screenshots" workflow renders
+  those screens again and commits the ones that changed.
 - Commit messages: imperative mood, focused on why ("Avoid re-listing folders after each upload").
 
 ## Project layout

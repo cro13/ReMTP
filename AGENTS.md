@@ -19,8 +19,9 @@ Read `docs/DESIGN.md` (product), `docs/ARCHITECTURE.md` (code layout and the FFI
 - License notices: `scripts/third-party-licenses.py --package remtp-ffi --output /tmp/licenses.txt` (or
   `--package remtp-cli`); `scripts/ci/build-macos.sh` generates and bundles them.
 - Screenshots: `design/app-shots.sh` writes the app's own screens (main, transfers, inspector, access) to
-  `design/screenshots/` from a Debug build with the demo backend; the manual "Screenshots" workflow does the
-  same in CI and uploads them as an artifact. `design/render.sh` renders the mockups of what isn't built yet
+  `design/screenshots/` from a Debug build with the demo backend (needs a 2x screen). The "Screenshots" workflow
+  does the same on CI, on a 2x virtual display (`scripts/ci/virtual-display.m`), after app changes land on main
+  (or by hand) and commits the PNGs when a screen changed; don't commit them by hand. `design/render.sh` renders the mockups of what isn't built yet
   (sync, Windows) from `design/mockup/` to `design/mockup/renders/` (headless Chrome).
 
 ## Rules

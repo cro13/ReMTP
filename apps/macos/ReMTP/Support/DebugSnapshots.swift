@@ -460,6 +460,14 @@ enum DebugSnapshots {
         let folder = URL(fileURLWithPath: macPath, isDirectory: true).standardizedFileURL
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         writeViewSamples(into: folder)
+        // The same text on every run: sample files dated by the demo's clock (pinned by design/app-shots.sh)
+        // and a fixed free space on the Mac.
+        let sampleDate = Date(timeIntervalSince1970: TimeInterval(DemoLibrary.now - 7_200))
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] {
+            try? FileManager.default.setAttributes([.modificationDate: sampleDate],
+                                                   ofItemAtPath: folder.appendingPathComponent(name).path)
+        }
+        LocalFileSystem.pinnedAvailableCapacity = 303_000_000_000
         let galaxy = DemoDeviceService.galaxyID, sp3000 = DemoDeviceService.sp3000ID
         let storage: UInt32 = 0x0001_0001
         func device(_ id: String, _ path: String) -> PaneLocation {
@@ -477,7 +485,18 @@ enum DebugSnapshots {
                 writeComposited(window, to: out.appendingPathComponent("\(name)-\(suffix).png"))
             }
         }
+        // A 1× screen, like a CI runner's 1024 × 768, can't take these shots. The Screenshots workflow adds a 2×
+        // virtual display; the window goes to the sharpest screen.
+        if let sharpest = NSScreen.screens.max(by: { $0.backingScaleFactor < $1.backingScaleFactor }),
+           sharpest.backingScaleFactor > window.backingScaleFactor {
+            window.setFrameTopLeftPoint(NSPoint(x: sharpest.visibleFrame.minX + 24, y: sharpest.visibleFrame.maxY - 24))
+            await wait(0.5)
+        }
         window.setContentSize(NSSize(width: 1440, height: 880))
+        await wait(0.3)
+        let contentSize = window.contentRect(forFrameRect: window.frame).size
+        check("Screens are shot at 2× in a 1440 × 880 window (\(window.backingScaleFactor)×, \(contentSize))",
+              window.backingScaleFactor == 2 && contentSize == NSSize(width: 1440, height: 880))
 
         // Main window: the same trip on both sides, partly copied already; three pictures selected on the Mac.
         app.showStorage(deviceID: galaxy, storageID: storage)
@@ -540,12 +559,17 @@ enum DebugSnapshots {
         _ = await until(3) { app.devicePaneBrowsable && app.devicePane.items.count > 20 }
         app.activate(.device, focus: true)
         app.devicePane.selectAndReveal(Set(app.devicePane.items.map(\.name)), scrollTo: app.devicePane.items.first?.name)
+        // On simulated time, held at the same point every run, so the numbers and the graph repeat.
+        let hold: UInt64 = 470_000_000
+        DemoTransfer.screenshotHold = hold
         app.copySelection(from: app.devicePane)
-        _ = await until(5) { (app.transfers.running?.progress?.filesDone ?? 0) > 8 }
+        let held = await until(15) { (app.transfers.running?.progress?.bytesDone ?? 0) >= hold }
+        check("The copy holds after \(hold) bytes for the transfers screen", held)
         app.transfers.showDrawer()
         await wait(2.5)
         await screen("03-transfers")
         app.transfers.cancelAll()
+        DemoTransfer.screenshotHold = nil
         NSApp.appearance = nil
         await wait(0.5)
     }

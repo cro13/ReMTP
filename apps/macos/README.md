@@ -102,6 +102,10 @@ show (main window, inspector, device access, transfers; light and dark). Those s
 show the app as it ships: no Sync (toolbar, Transfer menu, sidebar pairs), no DEMO badge, and the home folder
 labelled "Home" instead of the account name (`AppModel.presentsAsShipping`, Debug builds only).
 `design/app-shots.sh [path/to/ReMTP.app]` runs that and copies exactly the canonical set,
-`design/screenshots/{01-main,03-transfers,05-inspector,06-access}-{light,dark}.png`; run it after changing how
-those screens look. Mockups of screens that aren't built yet (sync, Windows) are rendered by `design/render.sh`
+`design/screenshots/{01-main,03-transfers,05-inspector,06-access}-{light,dark}.png`. The screens are pinned so
+that a run only changes a PNG when the app looks different: British English dates, Zurich time and the demo's
+clock (`REMTP_DEMO_NOW`), a fixed free space on the Mac, and a copy on simulated time that holds at the same
+byte. They need a 2x screen in a window of 1440 × 880 points, or they fail. The "Screenshots" workflow runs the
+script after app changes land on main, on a 2x virtual display (`scripts/ci/virtual-display.m`), and commits
+the PNGs that changed. Mockups of screens that aren't built yet (sync, Windows) are rendered by `design/render.sh`
 to `design/mockup/renders/`, apart from the app's own shots.
