@@ -39,6 +39,14 @@ Before pushing the tag:
 After the tag's run, check `SHA256SUMS.txt` against the published downloads. A bad release can be turned
 back into a draft (`gh release edit <tag> --draft`) while a fixed one is tagged.
 
+## The website
+
+https://mtech.sh/remtp (repo `cro13/mtech.sh`; its `AGENTS.md` explains how it deploys) offers the
+Latest published release. Its version text and download button follow GitHub within a minute, so a
+release needs no change there, and turning a release back into a draft takes it off the site the same
+way. The site builds download URLs from the artifact names above: renaming an artifact needs the same
+change in that repo's `api/remtp.mjs`.
+
 ## What the pipeline does
 
 The build job (`scripts/ci/build-macos.sh`) has no access to any secret. It builds the app and the CLI,
