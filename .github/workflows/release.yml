@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.1.0 to build and publish a draft release (macOS only for now). Tag runs need all
+# Push a tag like v0.1.0 to build, sign and publish a release (macOS only for now). Tag runs need all
 # of these repository secrets and fail before building without them:
 #   MACOS_CERTIFICATE_P12_BASE64, MACOS_CERTIFICATE_PASSWORD   (Developer ID Application certificate)
 #   NOTARY_KEY_ID, NOTARY_ISSUER_ID, NOTARY_KEY_P8_BASE64      (App Store Connect API key for notarytool)
@@ -121,7 +121,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish draft release
+    name: Publish release
     if: github.ref_type == 'tag'
     needs: macos-sign
     runs-on: ubuntu-latest
@@ -136,7 +136,19 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
-      - name: Create draft release
+      # Created as a draft and published only once every file is attached, so the release never goes
+      # out (or becomes Latest) with downloads missing.
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "ReMTP ${GITHUB_REF_NAME#v}"
+      # A tag with a suffix, like v1.0.0-rc1, is published as a prerelease and never becomes Latest.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi
