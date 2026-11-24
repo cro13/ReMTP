@@ -2,8 +2,9 @@
 
 Releases are macOS only for now; the Rust core keeps building and testing on Windows in CI.
 
-Merging to `main` never releases. Bump the version, then push a version tag; GitHub Actions builds
-everything and creates a **draft** release:
+Merging to `main` never releases. Bump the version, then push a version tag; GitHub Actions builds,
+signs and notarizes everything and **publishes** the release as Latest (a tag with a suffix, like
+`v1.0.0-rc1`, becomes a prerelease instead). Test before tagging (see below): the tag is the release.
 
 ```sh
 # version in the root Cargo.toml (the CLI's --version) and MARKETING_VERSION in apps/macos/project.yml
@@ -26,14 +27,17 @@ Artifacts:
   `remtp`, `LICENSE.txt` and `THIRD_PARTY_LICENSES.txt`
 - `SHA256SUMS.txt`
 
-Before publishing the draft:
+Before pushing the tag:
 
 1. The first time, and after changing signing: run the workflow manually with the secrets set and check
    that both architectures sign, notarize and staple.
-2. Download a DMG from the draft, install it, and with a real device check listing, a copy each way,
-   Release/Restore of `ptpcamerad`, and an ADB USB-mode switch (the first switch creates ReMTP's key in the
-   login Keychain under the signed app's identity).
-3. Check `SHA256SUMS.txt` against the downloads, then publish the draft.
+2. Run the workflow manually on the commit you will tag, install a DMG from the run's artifacts, and with a
+   real device check listing, a copy each way, Release/Restore of `ptpcamerad`, and an ADB USB-mode switch
+   (with the secrets set, the first switch creates ReMTP's key in the login Keychain under the signed app's
+   identity).
+
+After the tag's run, check `SHA256SUMS.txt` against the published downloads. A bad release can be turned
+back into a draft (`gh release edit <tag> --draft`) while a fixed one is tagged.
 
 ## What the pipeline does
 
