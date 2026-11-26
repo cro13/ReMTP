@@ -83,7 +83,10 @@ jobs:
           path: design/screenshots/*.png
           if-no-files-found: error
 
-  # Separate from the build, so the token that can push never runs the app, its build scripts or dependencies.
+  # Separate from the build, so the key that can push never meets the app, its build scripts or dependencies.
+  # It pushes with a deploy key (secret SCREENSHOTS_DEPLOY_KEY): main's "Codex review" ruleset lets deploy keys
+  # through, and GitHub Actions can't be given that bypass on a personal repo. "[skip ci]" keeps the commit from
+  # starting CI, as a push with the job's own token never did.
   commit:
     name: Commit
     needs: render
@@ -91,11 +94,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref_name }}
+          ssh-key: ${{ secrets.SCREENSHOTS_DEPLOY_KEY }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: screenshots
@@ -111,7 +115,7 @@ jobs:
           git add design/screenshots
           if git diff --cached --quiet; then echo "Already up to date on $BRANCH."; exit 0; fi
           git diff --cached --stat
-          git commit -q -m "Update app screenshots" -m "Rendered by the Screenshots workflow from $GITHUB_SHA."
+          git commit -q -m "Update app screenshots" -m "Rendered by the Screenshots workflow from $GITHUB_SHA." -m "[skip ci]"
           for attempt in 1 2 3; do
             git push origin "HEAD:$BRANCH" && exit 0
             sleep 5
